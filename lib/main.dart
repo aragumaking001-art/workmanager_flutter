@@ -1,0 +1,433 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'video_splash_screen.dart';
+import 'providers/data_provider.dart';
+import 'tabs/summary_tab.dart';
+import 'tabs/today_summary_tab.dart';
+import 'tabs/total_ranking_tab.dart';
+import 'tabs/data_edit_tab.dart';
+import 'tabs/personal_stats_tab.dart';
+
+// 💡 動作モードの定義
+enum AppMode { administrator, kiosk, manager }
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  AppMode currentMode = AppMode.manager; // デフォルトはマネージャ用
+  String myIp = "Unknown";
+
+  if (!kIsWeb) {
+    try {
+      // 💡 ローカルIPアドレスを取得
+      for (var interface in await NetworkInterface.list()) {
+        for (var addr in interface.addresses) {
+          if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+            myIp = addr.address;
+            break;
+          }
+        }
+      }
+
+      // 💡 IPアドレスによるモード判定ロジック
+      if (myIp == "192.168.10.102") {
+        currentMode = AppMode.kiosk;
+      } else {
+        // 103から110の範囲判定
+        int lastOctet = int.tryParse(myIp.split('.').last) ?? 0;
+        if (lastOctet >= 103 && lastOctet <= 110) {
+          currentMode = AppMode.administrator;
+        } else {
+          currentMode = AppMode.manager;
+        }
+      }
+    } catch (e) {
+      print("IP取得失敗: $e");
+    }
+
+    // 全画面設定
+    if (Platform.isAndroid || Platform.isIOS) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
+
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      await windowManager.ensureInitialized();
+      windowManager.waitUntilReadyToShow(
+        const WindowOptions(
+          center: true,
+          backgroundColor: Colors.transparent,
+          skipTaskbar: false,
+          titleBarStyle: TitleBarStyle.hidden,
+        ),
+        () async {
+          await windowManager.show();
+          await windowManager.focus();
+          await windowManager.setFullScreen(true);
+        },
+      );
+    }
+  }
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => DataProvider()
+            ..fetchAndAnalyze()
+            ..startAutoRefresh(),
+        ),
+      ],
+      // 💡 判定されたモードとIPをアプリ全体に渡す
+      child: MyApp(appMode: currentMode, ipAddress: myIp),
+    ),
+  );
+}
+
+class MyApp extends StatelessWidget {
+  final AppMode appMode;
+  final String ipAddress;
+
+  const MyApp({super.key, required this.appMode, required this.ipAddress});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: '和気センター WorkManager Pro',
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('ja', 'JP')],
+      locale: const Locale('ja', 'JP'),
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        primaryColor: const Color(0xFF00CCFF),
+        scaffoldBackgroundColor: const Color(0xFF0F1115),
+      ),
+      // 💡 スプラッシュ画面にモード情報を渡す
+      home: VideoSplashScreen(appMode: appMode, ipAddress: ipAddress),
+    );
+  }
+}
+
+// ----------------------------------------------------------------------
+// 💡 共通で使えるオンライン・オフラインのインジケーターUI
+// ----------------------------------------------------------------------
+class ConnectionStatusIndicator extends StatelessWidget {
+  const ConnectionStatusIndicator({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = context.watch<DataProvider>();
+    final bool isOnline = data.isOnline;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isOnline ? Colors.greenAccent.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isOnline ? Colors.greenAccent : Colors.redAccent, width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isOnline ? Icons.wifi : Icons.wifi_off,
+            color: isOnline ? Colors.greenAccent : Colors.redAccent,
+            size: 16,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isOnline ? "Online" : "Offline",
+            style: TextStyle(
+              color: isOnline ? Colors.greenAccent : Colors.redAccent,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ----------------------------------------------------------------------
+// 💡 作業場用キオスクモード：カード待機画面
+// ----------------------------------------------------------------------
+class KioskWaitScreen extends StatefulWidget {
+  final String ipAddress;
+  const KioskWaitScreen({super.key, required this.ipAddress});
+
+  @override
+  State<KioskWaitScreen> createState() => _KioskWaitScreenState();
+}
+
+class _KioskWaitScreenState extends State<KioskWaitScreen> {
+  final FocusNode _focusNode = FocusNode();
+  final TextEditingController _nfcController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FocusScope.of(context).requestFocus(_focusNode);
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    _nfcController.dispose();
+    super.dispose();
+  }
+
+  void _handleNfcInput(String input) {
+    String workerId = input.trim();
+    if (workerId.isEmpty) return;
+    
+    _nfcController.clear();
+    FocusScope.of(context).requestFocus(_focusNode);
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => PersonalStatsTab(
+          initialWorkerId: workerId, 
+          isKioskMode: true, 
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    ).then((_) => FocusScope.of(context).requestFocus(_focusNode));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F1115),
+      body: Stack(
+        children: [
+          Opacity(
+            opacity: 0.0, 
+            child: TextField(
+              focusNode: _focusNode,
+              controller: _nfcController,
+              autofocus: true,
+              onSubmitted: _handleNfcInput,
+            ),
+          ),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Icon(Icons.contactless_rounded, size: 150, color: Color(0xFF00CCFF)))),
+                  const SizedBox(height: 30),
+                  const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("担当者カードをタッチしてください", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)))),
+                  const SizedBox(height: 20),
+                  const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("個人実績ステータスを確認できます", style: TextStyle(fontSize: 20, color: Colors.white54)))),
+                ],
+              ),
+            ),
+          ),
+          const Positioned(
+            top: 20,
+            right: 20,
+            child: ConnectionStatusIndicator(), // 💡 キオスク画面のインジケーター
+          ),
+          Positioned(
+            bottom: 10,
+            right: 15,
+            child: Text("Terminal IP: ${widget.ipAddress} [KIOSK MODE]", style: const TextStyle(color: Colors.white24, fontSize: 12)),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+// --- 🏠 メインメニュー画面（管理者・マネージャ共用） ---
+class MainLayout extends StatelessWidget {
+  final AppMode appMode;
+  const MainLayout({super.key, required this.appMode});
+
+  @override
+  Widget build(BuildContext context) {
+    List<Widget> bottomCards = [];
+    
+    if (appMode == AppMode.administrator) {
+      bottomCards.add(_menuCard(context, "個人別実績", Icons.person_search_rounded, Colors.orangeAccent, const PersonalStatsTab(isKioskMode: false)));
+    }
+    
+    bottomCards.add(_menuCard(context, "効率ランキング", Icons.emoji_events_rounded, Colors.amber, null));
+    bottomCards.add(_menuCard(context, "データ修正", Icons.edit_note_rounded, Colors.teal, DataEditTab(isAdmin: appMode == AppMode.administrator)));
+
+    List<Widget> bottomRowChildren = [];
+    for (int i = 0; i < 4; i++) {
+      if (i < bottomCards.length) {
+        bottomRowChildren.add(bottomCards[i]); 
+      } else {
+        bottomRowChildren.add(const Expanded(child: SizedBox.shrink())); 
+      }
+      
+      if (i < 3) {
+        bottomRowChildren.add(const SizedBox(width: 20));
+      }
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1A1C23),
+        title: Text(
+          appMode == AppMode.administrator ? "和気センター 統合ダッシュボード [管理者]" : "和気センター 統合ダッシュボード [フロアマネージャ]",
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        actions: const [
+          Center(child: ConnectionStatusIndicator()), // 💡 メイン画面の右上に追加
+          SizedBox(width: 20),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 30.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const FittedBox(fit: BoxFit.scaleDown, child: Text("フロア実績 (1F - 4F)", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF00CCFF)))),
+              const SizedBox(height: 20),
+              
+              Row(
+                children: [
+                  _menuCard(context, "1F 開梱・登録", Icons.unarchive_rounded, Colors.blueGrey, null),
+                  const SizedBox(width: 20),
+                  _menuCard(context, "2F 梱包・アダプタ", Icons.inventory_2_rounded, Colors.blueGrey, null),
+                  const SizedBox(width: 20),
+                  _menuCard(context, "3F 試験・検品", Icons.fact_check_rounded, Colors.blueGrey, null),
+                  const SizedBox(width: 20),
+                  _menuCard(context, "4F 筐体清掃", Icons.cleaning_services_rounded, const Color(0xFF00CCFF), const TabPageLayout()),
+                ],
+              ),
+              
+              const SizedBox(height: 40),
+              const FittedBox(fit: BoxFit.scaleDown, child: Text("分析・管理メニュー", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.orangeAccent))),
+              const SizedBox(height: 20),
+              
+              Row(
+                children: bottomRowChildren,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _menuCard(BuildContext context, String title, IconData icon, Color color, Widget? targetPage) {
+    bool isAvailable = targetPage != null;
+
+    return Expanded(
+      child: InkWell(
+        onTap: isAvailable ? () {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => targetPage));
+        } : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          height: 200, 
+          padding: const EdgeInsets.all(10), 
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color.withOpacity(isAvailable ? 0.6 : 0.1), 
+                color.withOpacity(isAvailable ? 0.1 : 0.05)
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: color.withOpacity(isAvailable ? 0.8 : 0.1), width: 2),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Icon(icon, size: 60, color: isAvailable ? color : Colors.white10))),
+              const SizedBox(height: 15),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(title, 
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 20, 
+                      fontWeight: FontWeight.bold,
+                      color: isAvailable ? Colors.white : Colors.white10,
+                    ),
+                  ),
+                ),
+              ),
+              if (!isAvailable) 
+                const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("(準備中)", style: TextStyle(color: Colors.white10, fontSize: 14)))),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- 📊 2. 4F実績詳細画面 ---
+class TabPageLayout extends StatefulWidget {
+  const TabPageLayout({super.key});
+
+  @override
+  State<TabPageLayout> createState() => _TabPageLayoutState();
+}
+
+class _TabPageLayoutState extends State<TabPageLayout> {
+  int _selectedIndex = 1; 
+
+  final List<Widget> _tabs = [
+    const TotalRankingTab(),     // 0: ランキング
+    const TodaySummaryTab(),    // 1: 本日出来高
+    const ModelAnalysisPage(),  // 2: 機種別集計
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1A1C23),
+        title: const Text("4F 作業実績詳細", style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: const [
+          // 💡 更新・閉じるボタンを削除し、インジケーターだけを配置
+          Center(child: ConnectionStatusIndicator()), 
+          SizedBox(width: 20),
+        ],
+      ),
+      body: _tabs[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        backgroundColor: const Color(0xFF1A1C23),
+        type: BottomNavigationBarType.fixed, 
+        selectedItemColor: const Color(0xFF00CCFF),
+        unselectedItemColor: Colors.white30,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.emoji_events_rounded), label: 'ランキング'),
+          BottomNavigationBarItem(icon: Icon(Icons.fact_check_rounded), label: '本日出来高'),
+          BottomNavigationBarItem(icon: Icon(Icons.summarize), label: '機種別集計'),
+        ],
+      ),
+    );
+  }
+}

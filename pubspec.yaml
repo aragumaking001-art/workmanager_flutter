@@ -1,0 +1,54 @@
+name: workmanager_flutter
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # 💡 dependenciesの直下に配置
+  video_player: ^2.8.1
+  cupertino_icons: ^1.0.8
+  #mysql1: ^0.20.0
+  mysql_client: ^0.0.27
+  provider: ^6.1.5+1
+  window_manager: ^0.5.1
+  intl: ^0.20.2 
+  flutter_localizations:
+    sdk: flutter
+  table_calendar: ^3.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: "^0.13.1"
+  flutter_native_splash: ^2.4.0
+  flutter_lints: ^6.0.0
+
+# 💡 ここから設定セクション（一番左から書く）
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/app_icon.png"
+  adaptive_icon_background: "#0F1115" 
+  adaptive_icon_foreground: "assets/app_icon.png"
+
+flutter_native_splash:
+  color: "#0F1115"
+  image: assets/app_icon.png
+  fullscreen: true
+  # Android 12以降でアイコンが小さくなるのを防ぐための設定
+  android_12:
+    image: assets/app_icon.png
+    color: "#0F1115"
+    icon_background_color: "#0F1115"
+
+flutter:
+  assets:
+    - assets/videos/splash_logo.mp4
+    - assets/app_icon.png
+  uses-material-design: true

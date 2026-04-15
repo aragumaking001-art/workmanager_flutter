@@ -1,0 +1,5 @@
+android: true
+ios: true
+image_path: "assets/app_icon.png"
+adaptive_icon_background: "#0F1115"
+adaptive_icon_foreground: "assets/app_icon.png"
