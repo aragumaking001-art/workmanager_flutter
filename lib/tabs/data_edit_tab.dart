@@ -20,6 +20,27 @@ class _DataEditTabState extends State<DataEditTab> {
   List<Map<String, dynamic>> _dayLogs = [];
   bool _isFetching = false;
 
+  String? _selectedWorkerFilter;
+
+  List<String> get _uniqueWorkers {
+    Set<String> workers = {};
+    for (var log in _dayLogs) {
+      workers.add(log['worker_name'] ?? log['worker_id'] ?? "不明");
+    }
+    List<String> sorted = workers.toList()..sort();
+    return ["すべて", ...sorted];
+  }
+
+  List<Map<String, dynamic>> get _filteredLogs {
+    if (_selectedWorkerFilter == null || _selectedWorkerFilter == "すべて") {
+      return _dayLogs;
+    }
+    return _dayLogs.where((log) {
+      String name = log['worker_name'] ?? log['worker_id'] ?? "不明";
+      return name == _selectedWorkerFilter;
+    }).toList();
+  }
+
   List<Map<String, dynamic>> _allModelsMaster = [];
 
   @override
@@ -80,7 +101,7 @@ class _DataEditTabState extends State<DataEditTab> {
       var result = await conn.execute('''
         SELECT 
           l.id, l.model_name, l.maker, l.maker_abbr, l.worker_id, l.clean_qty, l.air_clean_qty, 
-          l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty,
+          l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty, l.work_minutes,
           mem.worker_name
         FROM unit_cleaning_logs l
         LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
@@ -92,7 +113,7 @@ class _DataEditTabState extends State<DataEditTab> {
       for (var row in result.rows) {
         temp.add(row.assoc());
       }
-      setState(() => _dayLogs = temp);
+      _dayLogs = temp;
     } catch (e) {
       print("当日ログ取得エラー: $e");
     } finally {
@@ -104,6 +125,10 @@ class _DataEditTabState extends State<DataEditTab> {
   void _showConfirmUpdateDialog(Map<String, dynamic> oldLog, Map<String, dynamic> newData, int id, String targetWorkType) {
     final provider = Provider.of<DataProvider>(context, listen: false);
     String workerName = oldLog['worker_name'] ?? oldLog['worker_id'] ?? "不明";
+
+    int oldAir = int.tryParse(oldLog['air_clean_qty'] ?? '0') ?? 0;
+    int oldClean = int.tryParse(oldLog['clean_qty'] ?? '0') ?? 0;
+    String oldWorkType = oldAir > 0 ? "エアー清掃" : (oldClean > 0 ? "清掃" : "筐体交換");
 
     String oldRawModel = oldLog['model_name'] ?? "不明";
     String oldCleanModel = oldRawModel.contains(':') ? oldRawModel.split(':').last.replaceAll('}', '').trim() : oldRawModel;
@@ -150,7 +175,9 @@ class _DataEditTabState extends State<DataEditTab> {
                   ),
                   const Divider(color: Colors.white24, height: 25),
 
+                  _buildCompareRow("作業区分", oldWorkType, targetWorkType, isText: true),
                   _buildCompareRow("機種名", oldModelDisplay, newModelDisplay, isText: true),
+                  _buildCompareRow("作業時間(分)", double.tryParse(oldLog['work_minutes']?.toString() ?? '0') ?? 0, newData['work_minutes']),
                   
                   if (targetWorkType == "エアー清掃") ...[
                     _buildCompareRow("エアー清掃", int.tryParse(oldLog['air_clean_qty'] ?? '0') ?? 0, newData['air_clean_qty']),
@@ -310,6 +337,11 @@ class _DataEditTabState extends State<DataEditTab> {
     TextEditingController cleanCtrl = TextEditingController(text: log['clean_qty']);
     TextEditingController toSwapCtrl = TextEditingController(text: log['to_swap_qty']);
     TextEditingController swapCtrl = TextEditingController(text: log['swap_qty']); 
+    double totalMinutes = double.tryParse(log['work_minutes']?.toString() ?? '0') ?? 0.0;
+    int hours = (totalMinutes / 60).floor();
+    int minutes = (totalMinutes % 60).round();
+    TextEditingController hoursCtrl = TextEditingController(text: hours > 0 ? hours.toString() : '');
+    TextEditingController minutesCtrl = TextEditingController(text: minutes.toString());
 
     int airQty = int.tryParse(log['air_clean_qty'] ?? '0') ?? 0;
     int cleanQty = int.tryParse(log['clean_qty'] ?? '0') ?? 0;
@@ -387,6 +419,39 @@ class _DataEditTabState extends State<DataEditTab> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const Text("作業区分", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: targetWorkType,
+                            dropdownColor: const Color(0xFF1A1C23),
+                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00CCFF), size: 30),
+                            items: ["エアー清掃", "清掃", "筐体交換"].map((String value) {
+                              return DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              );
+                            }).toList(),
+                            onChanged: (newValue) {
+                              if (newValue != null) {
+                                setDialogState(() {
+                                  targetWorkType = newValue;
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 15),
                       const Text("機種名", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)), 
                       const SizedBox(height: 8),
                       
@@ -505,6 +570,18 @@ class _DataEditTabState extends State<DataEditTab> {
                         const Divider(color: Colors.white10, height: 40),
                         _buildEditField("交換完了台数", swapCtrl), 
                       ],
+                      const Divider(color: Colors.white10, height: 40),
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8.0),
+                        child: Text("作業時間", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
+                      ),
+                      Row(
+                        children: [
+                          Expanded(child: _buildTimeField("時間", hoursCtrl)),
+                          const SizedBox(width: 20),
+                          Expanded(child: _buildTimeField("分", minutesCtrl)),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -529,11 +606,12 @@ class _DataEditTabState extends State<DataEditTab> {
                       "maker": makerFull,       
                       "maker_abbr": makerAbbr,  
                       "std_qty": stdQty,        
-                      "air_clean_qty": int.tryParse(airCtrl.text) ?? 0,
-                      "to_clean_qty": int.tryParse(toCleanCtrl.text) ?? 0,
-                      "clean_qty": int.tryParse(cleanCtrl.text) ?? 0,
-                      "to_swap_qty": int.tryParse(toSwapCtrl.text) ?? 0,
-                      "swap_qty": int.tryParse(swapCtrl.text) ?? 0, 
+                      "air_clean_qty": targetWorkType == "エアー清掃" ? (int.tryParse(airCtrl.text) ?? 0) : 0,
+                      "to_clean_qty": targetWorkType == "エアー清掃" ? (int.tryParse(toCleanCtrl.text) ?? 0) : 0,
+                      "clean_qty": targetWorkType == "清掃" ? (int.tryParse(cleanCtrl.text) ?? 0) : 0,
+                      "to_swap_qty": targetWorkType == "清掃" ? (int.tryParse(toSwapCtrl.text) ?? 0) : 0,
+                      "swap_qty": targetWorkType == "筐体交換" ? (int.tryParse(swapCtrl.text) ?? 0) : 0, 
+                      "work_minutes": ((int.tryParse(hoursCtrl.text) ?? 0) * 60 + (int.tryParse(minutesCtrl.text) ?? 0)).toDouble(),
                     };
                     
                     _showConfirmUpdateDialog(log, newData, id, targetWorkType);
@@ -562,6 +640,23 @@ class _DataEditTabState extends State<DataEditTab> {
           focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00CCFF), width: 2)),
           contentPadding: const EdgeInsets.symmetric(vertical: 12),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTimeField(String label, TextEditingController ctrl) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: TextInputType.number,
+      style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), 
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold), 
+        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00CCFF), width: 2)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+        suffixText: label,
+        suffixStyle: const TextStyle(color: Colors.white70, fontSize: 16),
       ),
     );
   }
@@ -667,21 +762,51 @@ class _DataEditTabState extends State<DataEditTab> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16), 
           color: const Color(0xFF1A1C23),
           child: Row(
-            children: const [
-              Expanded(flex: 2, child: Text("作業者", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
-              Expanded(flex: 4, child: Text("機種名", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
-              Expanded(flex: 3, child: Text("内容１", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
-              Expanded(flex: 3, child: Text("内容２", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
-              Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("編集", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)))),
+            children: [
+              Expanded(
+                flex: 2, 
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text("作業者", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 4),
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.filter_list_rounded, color: Colors.cyanAccent, size: 20),
+                      color: const Color(0xFF1A1C23),
+                      tooltip: "作業者で絞り込み",
+                      onSelected: (val) {
+                        setState(() {
+                          _selectedWorkerFilter = val == "すべて" ? null : val;
+                        });
+                      },
+                      itemBuilder: (context) {
+                        return _uniqueWorkers.map((w) {
+                          bool isSelected = (w == "すべて" && _selectedWorkerFilter == null) || w == _selectedWorkerFilter;
+                          return PopupMenuItem<String>(
+                            value: w,
+                            child: Text(w, style: TextStyle(color: isSelected ? Colors.cyanAccent : Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                          );
+                        }).toList();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const Expanded(flex: 3, child: Text("機種名", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
+              const Expanded(flex: 2, child: Text("作業区分", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
+              const Expanded(flex: 2, child: Text("内容１", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
+              const Expanded(flex: 2, child: Text("内容２", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
+              const Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("作業時間", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)))),
+              const Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("編集", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)))),
             ],
           ),
         ),
         
         Expanded(
           child: ListView.builder(
-            itemCount: _dayLogs.length,
+            itemCount: _filteredLogs.length,
             itemBuilder: (context, index) {
-              var log = _dayLogs[index];
+              var log = _filteredLogs[index];
               
               String workerName = log['worker_name'] ?? log['worker_id'] ?? "不明";
               String rawModelName = log['model_name'] ?? "不明";
@@ -694,6 +819,11 @@ class _DataEditTabState extends State<DataEditTab> {
               int cleanQty = int.tryParse(log['clean_qty'] ?? '0') ?? 0;
               int toCleanQty = int.tryParse(log['to_clean_qty'] ?? '0') ?? 0;
               int toSwapQty = int.tryParse(log['to_swap_qty'] ?? '0') ?? 0;
+              double workMinutes = double.tryParse(log['work_minutes']?.toString() ?? '0') ?? 0.0;
+              int totalMin = workMinutes.round();
+              int h = totalMin ~/ 60;
+              int m = totalMin % 60;
+              String timeDisplay = h > 0 ? "${h}時間${m}分" : "${m}分";
 
               String mainLabel = "";
               int mainQty = 0;
@@ -733,18 +863,22 @@ class _DataEditTabState extends State<DataEditTab> {
                           child: Text(workerName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis), 
                         ),
                         Expanded(
-                          flex: 4,
+                          flex: 3,
                           child: Text(displayModelName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis), 
                         ),
                         Expanded(
-                          flex: 3,
+                          flex: 2,
+                          child: Text(mainLabel, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: accentColor)),
+                        ),
+                        Expanded(
+                          flex: 2,
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: _compactInfoChip(mainLabel, mainQty, accentColor),
+                            child: _compactInfoChip("台数", mainQty, accentColor),
                           ),
                         ),
                         Expanded(
-                          flex: 3,
+                          flex: 2,
                           child: Align(
                             alignment: Alignment.centerLeft,
                             child: subLabel != "その他" 
@@ -755,6 +889,13 @@ class _DataEditTabState extends State<DataEditTab> {
                                   ) 
                                 : const SizedBox(),
                           ),
+                        ),
+                        Expanded(
+                          flex: 1,
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: Text(timeDisplay, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white))
+                          ), 
                         ),
                         const Expanded(
                           flex: 1,
@@ -775,7 +916,7 @@ class _DataEditTabState extends State<DataEditTab> {
     );
   }
 
-  Widget _compactInfoChip(String label, int count, Color color) {
+  Widget _compactInfoChip(String label, dynamic countOrText, Color color, {bool isText = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), 
       decoration: BoxDecoration(
@@ -788,7 +929,7 @@ class _DataEditTabState extends State<DataEditTab> {
         children: [
           Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)))), 
           const SizedBox(width: 8),
-          FittedBox(fit: BoxFit.scaleDown, child: Text("$count", style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold))), 
+          FittedBox(fit: BoxFit.scaleDown, child: Text(countOrText.toString(), style: TextStyle(color: color, fontSize: isText ? 16 : 20, fontWeight: FontWeight.bold))), 
         ],
       ),
     );
