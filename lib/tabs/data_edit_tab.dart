@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:mysql_client/mysql_client.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../providers/data_provider.dart';
 
 enum EditMode { menu, today, past }
@@ -19,6 +20,7 @@ class _DataEditTabState extends State<DataEditTab> {
   EditMode _currentMode = EditMode.menu;
   List<Map<String, dynamic>> _dayLogs = [];
   bool _isFetching = false;
+  DateTime? _selectedPastDate;
 
   String? _selectedWorkerFilter;
 
@@ -86,10 +88,9 @@ class _DataEditTabState extends State<DataEditTab> {
     }
   }
 
-  Future<void> _fetchTodayLogs() async {
+  Future<void> _fetchLogs(DateTime targetDate) async {
     setState(() {
       _isFetching = true;
-      _currentMode = EditMode.today;
     });
     
     final conn = await MySQLConnection.createConnection(
@@ -97,7 +98,7 @@ class _DataEditTabState extends State<DataEditTab> {
     );
     try {
       await conn.connect();
-      String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      String dateStr = DateFormat('yyyy-MM-dd').format(targetDate);
       var result = await conn.execute('''
         SELECT 
           l.id, l.model_name, l.maker, l.maker_abbr, l.worker_id, l.clean_qty, l.air_clean_qty, 
@@ -107,7 +108,7 @@ class _DataEditTabState extends State<DataEditTab> {
         LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
         WHERE DATE(l.work_date) = :d 
         ORDER BY l.id DESC
-      ''', {"d": today});
+      ''', {"d": dateStr});
       
       List<Map<String, dynamic>> temp = [];
       for (var row in result.rows) {
@@ -115,7 +116,7 @@ class _DataEditTabState extends State<DataEditTab> {
       }
       _dayLogs = temp;
     } catch (e) {
-      print("当日ログ取得エラー: $e");
+      print("ログ取得エラー: $e");
     } finally {
       await conn.close();
       setState(() => _isFetching = false);
@@ -255,7 +256,11 @@ class _DataEditTabState extends State<DataEditTab> {
                       );
                     },
                   ).then((_) {
-                    _fetchTodayLogs();
+                    if (_currentMode == EditMode.today) {
+                      _fetchLogs(DateTime.now());
+                    } else if (_currentMode == EditMode.past && _selectedPastDate != null) {
+                      _fetchLogs(_selectedPastDate!);
+                    }
                   });
                 }
               },
@@ -695,8 +700,239 @@ class _DataEditTabState extends State<DataEditTab> {
   Widget _buildBody() {
     switch (_currentMode) {
       case EditMode.menu: return _buildMenuView();
-      case EditMode.today: return _buildTodayView();
-      case EditMode.past: return const Center(child: Text("過去データ修正は準備中です", style: TextStyle(color: Colors.white70, fontSize: 20, fontWeight: FontWeight.bold))); 
+      case EditMode.today: return _buildLogsView(isPastMode: false);
+      case EditMode.past: return _buildPastView(); 
+    }
+  }
+
+  Widget _buildPastView() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          color: const Color(0xFF1A1C23),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text("対象日: ", style: TextStyle(color: Colors.white70, fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(width: 15),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00CCFF).withOpacity(0.2),
+                  foregroundColor: const Color(0xFF00CCFF),
+                  padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
+                  side: const BorderSide(color: Color(0xFF00CCFF), width: 1.5),
+                ),
+                icon: const Icon(Icons.calendar_month_rounded, size: 28),
+                label: Text(
+                  _selectedPastDate == null ? "日付を選択" : DateFormat('yyyy年MM月dd日').format(_selectedPastDate!),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () async {
+                  await _pickCustomDate();
+                },
+              ),
+            ],
+          ),
+        ),
+        if (_selectedPastDate == null)
+          const Expanded(child: Center(child: Text("上部のボタンから修正したい日付を選択してください", style: TextStyle(color: Colors.white54, fontSize: 20, fontWeight: FontWeight.bold))))
+        else
+          Expanded(child: _buildLogsView(isPastMode: true)),
+      ],
+    );
+  }
+
+  Future<void> _pickCustomDate() async {
+    DateTime _focusedDay = _selectedPastDate ?? DateTime.now().subtract(const Duration(days: 1));
+    DateTime? _selectedDay = _selectedPastDate;
+
+    List<int> years = List.generate(11, (index) => 2020 + index);
+    List<int> months = List.generate(12, (index) => index + 1);
+
+    final result = await showDialog<DateTime?>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 550, maxHeight: 700),
+                width: MediaQuery.of(context).size.width * 0.9,
+                height: MediaQuery.of(context).size.height * 0.9,
+                padding: const EdgeInsets.all(25),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1C23),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: const Color(0xFF00FFCC), width: 2),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: Column(
+                    children: [
+                      const FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          "修正する日付を選択",
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white10,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButton<int>(
+                              value: _focusedDay.year,
+                              dropdownColor: const Color(0xFF252830),
+                              underline: const SizedBox(),
+                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
+                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                              items: years.map((y) {
+                                return DropdownMenuItem(value: y, child: Text("$y年"));
+                              }).toList(),
+                              onChanged: (newYear) {
+                                if (newYear != null) {
+                                  setDialogState(() {
+                                    _focusedDay = DateTime(newYear, _focusedDay.month, 1);
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white10,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButton<int>(
+                              value: _focusedDay.month,
+                              dropdownColor: const Color(0xFF252830),
+                              underline: const SizedBox(),
+                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
+                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                              items: months.map((m) {
+                                return DropdownMenuItem(value: m, child: Text("$m月"));
+                              }).toList(),
+                              onChanged: (newMonth) {
+                                if (newMonth != null) {
+                                  setDialogState(() {
+                                    _focusedDay = DateTime(_focusedDay.year, newMonth, 1);
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: TableCalendar(
+                            locale: 'ja_JP',
+                            firstDay: DateTime(2020),
+                            lastDay: DateTime.now(),
+                            focusedDay: _focusedDay,
+                            selectedDayPredicate: (day) {
+                              return isSameDay(_selectedDay, day);
+                            },
+                            onDaySelected: (selectedDay, focusedDay) {
+                              setDialogState(() {
+                                _selectedDay = selectedDay;
+                                _focusedDay = focusedDay;
+                              });
+                            },
+                            calendarStyle: const CalendarStyle(
+                              selectedDecoration: BoxDecoration(color: Color(0xFF00FFCC), shape: BoxShape.circle),
+                              todayDecoration: BoxDecoration(color: Colors.white10, shape: BoxShape.circle),
+                              defaultTextStyle: TextStyle(color: Colors.white, fontSize: 22),
+                              outsideTextStyle: TextStyle(color: Colors.white24, fontSize: 22),
+                              weekendTextStyle: TextStyle(color: Colors.redAccent, fontSize: 22),
+                            ),
+                            calendarBuilders: CalendarBuilders(
+                              dowBuilder: (context, day) {
+                                if (day.weekday == DateTime.saturday) {
+                                  return const Center(child: Text('土', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 20)));
+                                }
+                                if (day.weekday == DateTime.sunday) {
+                                  return const Center(child: Text('日', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 20)));
+                                }
+                                return null;
+                              },
+                              defaultBuilder: (context, day, focusedDay) {
+                                if (day.weekday == DateTime.saturday) {
+                                  return Center(child: Text('${day.day}', style: const TextStyle(color: Colors.blueAccent, fontSize: 22)));
+                                }
+                                return null;
+                              },
+                            ),
+                            daysOfWeekHeight: 50,
+                            headerStyle: const HeaderStyle(
+                              formatButtonVisible: false,
+                              titleCentered: true,
+                              titleTextStyle: TextStyle(fontSize: 0), 
+                              leftChevronIcon: Icon(Icons.chevron_left, color: Color(0xFF00FFCC), size: 40),
+                              rightChevronIcon: Icon(Icons.chevron_right, color: Color(0xFF00FFCC), size: 40),
+                              headerMargin: EdgeInsets.only(bottom: 5),
+                            ),
+                            onPageChanged: (focusedDay) {
+                               setDialogState(() {
+                                 _focusedDay = focusedDay;
+                               });
+                            },
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 15),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("キャンセル", style: TextStyle(color: Colors.white54, fontSize: 20)),
+                          ),
+                          const SizedBox(width: 30),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00FFCC),
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () {
+                              if (_selectedDay != null) {
+                                Navigator.pop(context, _selectedDay);
+                              }
+                            },
+                            child: const Text("決定", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedPastDate = result;
+      });
+      _fetchLogs(result);
     }
   }
 
@@ -712,10 +948,19 @@ class _DataEditTabState extends State<DataEditTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Flexible(child: _menuButton("当日データ修正", Icons.today, Colors.teal, _fetchTodayLogs)),
+              Flexible(child: _menuButton("当日データ修正", Icons.today, Colors.teal, () {
+                setState(() => _currentMode = EditMode.today);
+                _fetchLogs(DateTime.now());
+              })),
               if (widget.isAdmin) ...[
                 SizedBox(width: MediaQuery.of(context).size.width * 0.05), 
-                Flexible(child: _menuButton("過去データ修正", Icons.history, Colors.blueGrey, () => setState(() => _currentMode = EditMode.past))),
+                Flexible(child: _menuButton("過去データ修正", Icons.history, Colors.blueGrey, () {
+                  setState(() {
+                    _currentMode = EditMode.past;
+                    _selectedPastDate = null;
+                    _dayLogs = [];
+                  });
+                })),
               ]
             ],
           )
@@ -752,9 +997,9 @@ class _DataEditTabState extends State<DataEditTab> {
     );
   }
 
-  Widget _buildTodayView() {
+  Widget _buildLogsView({required bool isPastMode}) {
     if (_isFetching) return const Center(child: CircularProgressIndicator(color: Color(0xFF00CCFF)));
-    if (_dayLogs.isEmpty) return const Center(child: Text("本日の実績データはまだありません", style: TextStyle(color: Colors.white70, fontSize: 20, fontWeight: FontWeight.bold)));
+    if (_dayLogs.isEmpty) return Center(child: Text(isPastMode ? "この日の実績データはありません" : "本日の実績データはまだありません", style: const TextStyle(color: Colors.white70, fontSize: 20, fontWeight: FontWeight.bold)));
 
     return Column(
       children: [

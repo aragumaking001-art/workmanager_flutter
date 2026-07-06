@@ -7,6 +7,8 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'video_splash_screen.dart';
 import 'providers/data_provider.dart';
+import 'pages/personal_productivity_page.dart';
+
 import 'tabs/summary_tab.dart';
 import 'tabs/today_summary_tab.dart';
 import 'tabs/total_ranking_tab.dart';
@@ -131,9 +133,14 @@ class ConnectionStatusIndicator extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: isOnline ? Colors.greenAccent.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+        color: isOnline
+            ? Colors.greenAccent.withOpacity(0.1)
+            : Colors.redAccent.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isOnline ? Colors.greenAccent : Colors.redAccent, width: 1.5),
+        border: Border.all(
+          color: isOnline ? Colors.greenAccent : Colors.redAccent,
+          width: 1.5,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -192,17 +199,15 @@ class _KioskWaitScreenState extends State<KioskWaitScreen> {
   void _handleNfcInput(String input) {
     String workerId = input.trim();
     if (workerId.isEmpty) return;
-    
+
     _nfcController.clear();
     FocusScope.of(context).requestFocus(_focusNode);
 
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => PersonalStatsTab(
-          initialWorkerId: workerId, 
-          isKioskMode: true, 
-        ),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            PersonalStatsTab(initialWorkerId: workerId, isKioskMode: true),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -217,7 +222,7 @@ class _KioskWaitScreenState extends State<KioskWaitScreen> {
       body: Stack(
         children: [
           Opacity(
-            opacity: 0.0, 
+            opacity: 0.0,
             child: TextField(
               focusNode: _focusNode,
               controller: _nfcController,
@@ -231,11 +236,40 @@ class _KioskWaitScreenState extends State<KioskWaitScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Icon(Icons.contactless_rounded, size: 150, color: Color(0xFF00CCFF)))),
+                  const Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Icon(
+                        Icons.contactless_rounded,
+                        size: 150,
+                        color: Color(0xFF00CCFF),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 30),
-                  const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("担当者カードをタッチしてください", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)))),
+                  const Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "担当者カードをタッチしてください",
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 20),
-                  const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("個人実績ステータスを確認できます", style: TextStyle(fontSize: 20, color: Colors.white54)))),
+                  const Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "個人実績ステータスを確認できます",
+                        style: TextStyle(fontSize: 20, color: Colors.white54),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -248,8 +282,11 @@ class _KioskWaitScreenState extends State<KioskWaitScreen> {
           Positioned(
             bottom: 10,
             right: 15,
-            child: Text("Terminal IP: ${widget.ipAddress} [KIOSK MODE]", style: const TextStyle(color: Colors.white24, fontSize: 12)),
-          )
+            child: Text(
+              "Terminal IP: ${widget.ipAddress} [KIOSK MODE]",
+              style: const TextStyle(color: Colors.white24, fontSize: 12),
+            ),
+          ),
         ],
       ),
     );
@@ -264,22 +301,46 @@ class MainLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     List<Widget> bottomCards = [];
-    
+
     if (appMode == AppMode.administrator) {
-      bottomCards.add(_menuCard(context, "個人別実績", Icons.person_search_rounded, Colors.orangeAccent, const PersonalStatsTab(isKioskMode: false)));
+      bottomCards.add(
+        _menuCard(
+          context,
+          "個人別実績",
+          Icons.person_search_rounded,
+          Colors.orangeAccent,
+          const PersonalStatsTab(isKioskMode: false),
+        ),
+      );
     }
-    
-    bottomCards.add(_menuCard(context, "効率ランキング", Icons.emoji_events_rounded, Colors.amber, null));
-    bottomCards.add(_menuCard(context, "データ修正", Icons.edit_note_rounded, Colors.teal, DataEditTab(isAdmin: appMode == AppMode.administrator)));
+
+    bottomCards.add(
+      _menuCard(
+        context,
+        "個人別生産性",
+        Icons.emoji_events_rounded,
+        Colors.amber,
+        const PersonalProductivityPage(),
+      ),
+    );
+    bottomCards.add(
+      _menuCard(
+        context,
+        "データ修正",
+        Icons.edit_note_rounded,
+        Colors.teal,
+        DataEditTab(isAdmin: appMode == AppMode.administrator),
+      ),
+    );
 
     List<Widget> bottomRowChildren = [];
     for (int i = 0; i < 4; i++) {
       if (i < bottomCards.length) {
-        bottomRowChildren.add(bottomCards[i]); 
+        bottomRowChildren.add(bottomCards[i]);
       } else {
-        bottomRowChildren.add(const Expanded(child: SizedBox.shrink())); 
+        bottomRowChildren.add(const Expanded(child: SizedBox.shrink()));
       }
-      
+
       if (i < 3) {
         bottomRowChildren.add(const SizedBox(width: 20));
       }
@@ -289,7 +350,9 @@ class MainLayout extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A1C23),
         title: Text(
-          appMode == AppMode.administrator ? "和気センター 統合ダッシュボード [管理者]" : "和気センター 統合ダッシュボード [フロアマネージャ]",
+          appMode == AppMode.administrator
+              ? "和気センター 統合ダッシュボード [管理者]"
+              : "和気センター 統合ダッシュボード [フロアマネージャ]",
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
@@ -304,28 +367,70 @@ class MainLayout extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const FittedBox(fit: BoxFit.scaleDown, child: Text("フロア実績 (1F - 4F)", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF00CCFF)))),
+              const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  "フロア実績 (1F - 4F)",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF00CCFF),
+                  ),
+                ),
+              ),
               const SizedBox(height: 20),
-              
+
               Row(
                 children: [
-                  _menuCard(context, "1F 開梱・登録", Icons.unarchive_rounded, Colors.blueGrey, null),
+                  _menuCard(
+                    context,
+                    "1F 開梱・登録",
+                    Icons.unarchive_rounded,
+                    Colors.blueGrey,
+                    null,
+                  ),
                   const SizedBox(width: 20),
-                  _menuCard(context, "2F 梱包・アダプタ", Icons.inventory_2_rounded, Colors.blueGrey, null),
+                  _menuCard(
+                    context,
+                    "2F 梱包・アダプタ",
+                    Icons.inventory_2_rounded,
+                    Colors.blueGrey,
+                    null,
+                  ),
                   const SizedBox(width: 20),
-                  _menuCard(context, "3F 試験・検品", Icons.fact_check_rounded, Colors.blueGrey, null),
+                  _menuCard(
+                    context,
+                    "3F 試験・検品",
+                    Icons.fact_check_rounded,
+                    Colors.blueGrey,
+                    null,
+                  ),
                   const SizedBox(width: 20),
-                  _menuCard(context, "4F 筐体清掃", Icons.cleaning_services_rounded, const Color(0xFF00CCFF), const TabPageLayout()),
+                  _menuCard(
+                    context,
+                    "4F 筐体清掃",
+                    Icons.cleaning_services_rounded,
+                    const Color(0xFF00CCFF),
+                    const TabPageLayout(),
+                  ),
                 ],
               ),
-              
+
               const SizedBox(height: 40),
-              const FittedBox(fit: BoxFit.scaleDown, child: Text("分析・管理メニュー", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.orangeAccent))),
-              const SizedBox(height: 20),
-              
-              Row(
-                children: bottomRowChildren,
+              const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  "分析・管理メニュー",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orangeAccent,
+                  ),
+                ),
               ),
+              const SizedBox(height: 20),
+
+              Row(children: bottomRowChildren),
             ],
           ),
         ),
@@ -333,50 +438,82 @@ class MainLayout extends StatelessWidget {
     );
   }
 
-  Widget _menuCard(BuildContext context, String title, IconData icon, Color color, Widget? targetPage) {
+  Widget _menuCard(
+    BuildContext context,
+    String title,
+    IconData icon,
+    Color color,
+    Widget? targetPage,
+  ) {
     bool isAvailable = targetPage != null;
 
     return Expanded(
       child: InkWell(
-        onTap: isAvailable ? () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => targetPage));
-        } : null,
+        onTap: isAvailable
+            ? () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => targetPage),
+                );
+              }
+            : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          height: 200, 
-          padding: const EdgeInsets.all(10), 
+          height: 200,
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                color.withOpacity(isAvailable ? 0.6 : 0.1), 
-                color.withOpacity(isAvailable ? 0.1 : 0.05)
+                color.withOpacity(isAvailable ? 0.6 : 0.1),
+                color.withOpacity(isAvailable ? 0.1 : 0.05),
               ],
             ),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: color.withOpacity(isAvailable ? 0.8 : 0.1), width: 2),
+            border: Border.all(
+              color: color.withOpacity(isAvailable ? 0.8 : 0.1),
+              width: 2,
+            ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Icon(icon, size: 60, color: isAvailable ? color : Colors.white10))),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Icon(
+                    icon,
+                    size: 60,
+                    color: isAvailable ? color : Colors.white10,
+                  ),
+                ),
+              ),
               const SizedBox(height: 15),
               Flexible(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text(title, 
+                  child: Text(
+                    title,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 20, 
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: isAvailable ? Colors.white : Colors.white10,
                     ),
                   ),
                 ),
               ),
-              if (!isAvailable) 
-                const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("(準備中)", style: TextStyle(color: Colors.white10, fontSize: 14)))),
+              if (!isAvailable)
+                const Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      "(準備中)",
+                      style: TextStyle(color: Colors.white10, fontSize: 14),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -394,12 +531,12 @@ class TabPageLayout extends StatefulWidget {
 }
 
 class _TabPageLayoutState extends State<TabPageLayout> {
-  int _selectedIndex = 1; 
+  int _selectedIndex = 1;
 
   final List<Widget> _tabs = [
-    const TotalRankingTab(),     // 0: ランキング
-    const TodaySummaryTab(),    // 1: 本日出来高
-    const ModelAnalysisPage(),  // 2: 機種別集計
+    const TotalRankingTab(), // 0: ランキング
+    const TodaySummaryTab(), // 1: 本日出来高
+    const ModelAnalysisPage(), // 2: 機種別集計
   ];
 
   @override
@@ -407,10 +544,13 @@ class _TabPageLayoutState extends State<TabPageLayout> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A1C23),
-        title: const Text("4F 作業実績詳細", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          "4F 作業実績詳細",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: const [
           // 💡 更新・閉じるボタンを削除し、インジケーターだけを配置
-          Center(child: ConnectionStatusIndicator()), 
+          Center(child: ConnectionStatusIndicator()),
           SizedBox(width: 20),
         ],
       ),
@@ -419,12 +559,18 @@ class _TabPageLayoutState extends State<TabPageLayout> {
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
         backgroundColor: const Color(0xFF1A1C23),
-        type: BottomNavigationBarType.fixed, 
+        type: BottomNavigationBarType.fixed,
         selectedItemColor: const Color(0xFF00CCFF),
         unselectedItemColor: Colors.white30,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.emoji_events_rounded), label: 'ランキング'),
-          BottomNavigationBarItem(icon: Icon(Icons.fact_check_rounded), label: '本日出来高'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.emoji_events_rounded),
+            label: 'ランキング',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.fact_check_rounded),
+            label: '本日出来高',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.summarize), label: '機種別集計'),
         ],
       ),
