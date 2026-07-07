@@ -312,17 +312,16 @@ class MainLayout extends StatelessWidget {
           const PersonalStatsTab(isKioskMode: false),
         ),
       );
+      bottomCards.add(
+        _menuCard(
+          context,
+          "生産性",
+          Icons.emoji_events_rounded,
+          Colors.amber,
+          const PersonalProductivityPage(),
+        ),
+      );
     }
-
-    bottomCards.add(
-      _menuCard(
-        context,
-        "個人別生産性",
-        Icons.emoji_events_rounded,
-        Colors.amber,
-        const PersonalProductivityPage(),
-      ),
-    );
     bottomCards.add(
       _menuCard(
         context,
@@ -356,9 +355,40 @@ class MainLayout extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
-        actions: const [
-          Center(child: ConnectionStatusIndicator()), // 💡 メイン画面の右上に追加
-          SizedBox(width: 20),
+        actions: [
+          if (appMode == AppMode.administrator)
+            Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.download, color: Color(0xFF00CCFF), size: 30),
+              tooltip: "データベースPCにCSVを出力",
+              onPressed: () async {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text("データベースPCへCSV出力を実行しています..."))
+                );
+                String? path = await Provider.of<DataProvider>(ctx, listen: false).exportCsvToDatabasePC();
+                if (path != null) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(
+                      content: Text("✅ CSV出力完了\nPCのデスクトップ ($path) に保存しました！"),
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 4),
+                    )
+                  );
+                } else {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(
+                      content: Text("❌ CSV出力失敗 (データベース側の設定で保存先が制限されている可能性があります)"),
+                      backgroundColor: Colors.redAccent,
+                      duration: Duration(seconds: 5),
+                    )
+                  );
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 15),
+          const Center(child: ConnectionStatusIndicator()), // 💡 メイン画面の右上に追加
+          const SizedBox(width: 20),
         ],
       ),
       body: SingleChildScrollView(

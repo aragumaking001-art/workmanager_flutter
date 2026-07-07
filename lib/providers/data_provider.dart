@@ -495,7 +495,7 @@ class DataProvider extends ChangeNotifier {
         String todaySlash = DateFormat('yyyy/MM/dd').format(now);
 
         var todayResults = await conn.execute('''
-          SELECT l.model_name, CAST(SUM(l.clean_qty) AS SIGNED) AS total_clean, MAX(IFNULL(l.maker_abbr, '')) AS maker_abbr, CAST(SUM(l.air_clean_qty) AS SIGNED) AS total_air, CAST(SUM(l.swap_qty) AS SIGNED) AS total_swap
+          SELECT l.model_name, CAST(SUM(l.clean_qty) AS SIGNED) AS total_clean, MAX(IFNULL(l.maker_abbr, '')) AS maker_abbr, CAST(SUM(l.air_clean_qty) AS SIGNED) AS total_air, CAST(SUM(l.swap_qty) AS SIGNED) AS total_swap, MIN(l.id) AS first_id
           FROM unit_cleaning_logs l
           WHERE (l.work_date LIKE '$todayHyphen%' OR l.work_date LIKE '$todaySlash%')
           GROUP BY l.model_name, l.maker_abbr
@@ -512,9 +512,14 @@ class DataProvider extends ChangeNotifier {
           m.maker = data['maker_abbr'] ?? ""; 
           m.air = double.tryParse(data['total_air'] ?? '0')?.toInt() ?? 0;
           m.swap = double.tryParse(data['total_swap'] ?? '0')?.toInt() ?? 0; 
+          m.sortId = int.tryParse(data['first_id'] ?? '9999999') ?? 9999999; // 💡 登録順(最小ID)を保持
+          
           if (m.clean > 0 || m.air > 0 || m.swap > 0) tempToday.add(m);
         }
-        tempToday.sort((a, b) => b.clean.compareTo(a.clean));
+
+        // 💡 最初に見つかったログID（登録順）で昇順ソートする
+        tempToday.sort((a, b) => a.sortId.compareTo(b.sortId));
+        
         _todayModels = tempToday;
       } catch (e) {}
 
@@ -609,5 +614,50 @@ class DataProvider extends ChangeNotifier {
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  Future<String?> exportCsvToDatabasePC() async {
+    try {
+      final conn = await MySQLConnection.createConnection(
+        host: '192.168.10.101', port: 3306, userName: 'work_user', password: 'work1234', databaseName: 'work_manager_db',
+      );
+      await conn.connect();
+      
+      String timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      String fileName = 'work_logs_$timestamp.csv';
+      String outPath = 'C:/Users/yamada/Desktop/$fileName';
+      
+      // カラム名を動的に取得してヘッダー行を作成
+      var res = await conn.execute('SELECT * FROM unit_cleaning_logs LIMIT 1');
+      String headerRow = "*";
+      String dataRow = "*";
+      if (res.rows.isNotEmpty) {
+        List<String> columns = res.rows.first.assoc().keys.toList();
+        headerRow = columns.map((c) => "'$c'").join(", ");
+        dataRow = columns.map((c) => "IFNULL($c, '')").join(", ");
+      } else {
+        // データがない場合
+        return null;
+      }
+      
+      String sql = '''
+        SELECT $headerRow
+        UNION ALL
+        SELECT $dataRow
+        INTO OUTFILE '$outPath'
+        CHARACTER SET cp932
+        FIELDS TERMINATED BY ',' 
+        ENCLOSED BY '"'
+        LINES TERMINATED BY '\\n'
+        FROM unit_cleaning_logs
+      ''';
+      
+      await conn.execute(sql);
+      await conn.close();
+      return outPath;
+    } catch (e) {
+      print("CSV出力エラー: $e");
+      return null;
+    }
   }
 }

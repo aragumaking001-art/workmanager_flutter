@@ -291,7 +291,7 @@ class _PersonalStatsTabState extends State<PersonalStatsTab> with SingleTickerPr
       worker.staminaScore,
       worker.contributionScore 
     ];
-    List<String> labels = ["作業速度\n(SPEED)", "品質スコア\n(QUALITY)", "対応力\n(TECH)", "スタミナ\n(STAMINA)", "貢献度\n(CONTRIB)"];
+    List<String> labels = ["作業速度\n(SPEED)", "品質スコア\n(QUALITY)", "対応力\n(TECH)", "稼働力\n(CAPACITY)", "貢献度\n(CONTRIB)"];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(30),

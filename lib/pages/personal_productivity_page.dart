@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
+import '../providers/data_provider.dart';
 
 class PersonalProductivityPage extends StatefulWidget {
   const PersonalProductivityPage({super.key});
@@ -210,11 +211,12 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
         SELECT 
           l.model_name, l.maker_abbr, l.std_qty as log_std_qty, 
           l.clean_qty, l.air_clean_qty, l.swap_qty, l.work_minutes,
-          m.std_air, m.std_clean, m.std_swap
+          m.std_air, m.std_clean, m.std_swap, m.sort_id
         FROM unit_cleaning_logs l
         LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
         LEFT JOIN (
           SELECT model_name,
+            MIN(CASE WHEN csv_id = '' OR csv_id = '0' THEN 9999 ELSE CAST(csv_id AS UNSIGNED) END) as sort_id,
             MAX(CASE WHEN work_type = 'エアー清掃' THEN std_qty END) as std_air,
             MAX(CASE WHEN work_type = '清掃' THEN std_qty END) as std_clean,
             MAX(CASE WHEN work_type = '筐体交換' THEN std_qty END) as std_swap
@@ -247,6 +249,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
         int mStdAir = double.tryParse(data['std_air']?.toString() ?? '0')?.toInt() ?? 0;
         int mStdClean = double.tryParse(data['std_clean']?.toString() ?? '0')?.toInt() ?? 0;
         int mStdSwap = double.tryParse(data['std_swap']?.toString() ?? '0')?.toInt() ?? 0;
+        int sortId = int.tryParse(data['sort_id']?.toString() ?? '999999') ?? 999999;
 
         String workType = "不明";
         int qty = 0;
@@ -274,6 +277,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
           agg[aggKey] = {
             "model_name": modelDisplay,
             "work_type": workType,
+            "sort_id": sortId,
             "total_qty": 0,
             "total_minutes": 0.0,
             "std_qty": stdQty, 
@@ -285,10 +289,23 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
 
       List<Map<String, dynamic>> finalList = agg.values.toList();
       
+      Map<String, int> typeOrder = {
+        "エアー清掃": 0,
+        "清掃": 1,
+        "筐体交換": 2,
+      };
+
       finalList.sort((a, b) {
-        double aProd = a["total_minutes"] > 0 ? (a["total_qty"] / (a["total_minutes"] / 60)) : 0;
-        double bProd = b["total_minutes"] > 0 ? (b["total_qty"] / (b["total_minutes"] / 60)) : 0;
-        return bProd.compareTo(aProd); 
+        int orderA = typeOrder[a["work_type"]] ?? 99;
+        int orderB = typeOrder[b["work_type"]] ?? 99;
+        
+        if (orderA != orderB) {
+          return orderA.compareTo(orderB);
+        }
+
+        int idA = a["sort_id"] ?? 999999;
+        int idB = b["sort_id"] ?? 999999;
+        return idA.compareTo(idB);
       });
 
       if (mounted) {
@@ -664,6 +681,29 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
     );
   }
 
+  double get _totalAchievementRate {
+    if (_aggregatedData.isEmpty) return 0.0;
+    
+    double totalWeightedAchieve = 0.0;
+    double totalTime = 0.0;
+    
+    for (var item in _aggregatedData) {
+      int totalQty = item['total_qty'] ?? 0;
+      double totalMinutes = (item['total_minutes'] ?? 0.0).toDouble();
+      int stdQty = item['std_qty'] ?? 0;
+      
+      if (totalMinutes > 0 && stdQty > 0) {
+        double currentProd = totalQty / (totalMinutes / 60);
+        double achieveRate = currentProd / stdQty;
+        totalWeightedAchieve += achieveRate * 100 * totalMinutes;
+        totalTime += totalMinutes;
+      }
+    }
+    
+    if (totalTime == 0) return 0.0;
+    return totalWeightedAchieve / totalTime;
+  }
+
   Widget _buildPersonalTab() {
     return Padding(
       padding: const EdgeInsets.all(20.0),
@@ -762,6 +802,34 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
               ),
             ),
             const SizedBox(height: 20),
+
+            if (!_isFetching && _aggregatedData.isNotEmpty && _selectedWorker != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00FFCC).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: const Color(0xFF00FFCC).withOpacity(0.5)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.stars, color: Color(0xFF00FFCC), size: 32),
+                    const SizedBox(width: 15),
+                    const Text("全機種 総合達成率:", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 20),
+                    Text(
+                      "${_totalAchievementRate.toStringAsFixed(1)}%",
+                      style: TextStyle(
+                        color: _totalAchievementRate >= 100 ? Colors.greenAccent : (_totalAchievementRate >= 80 ? Colors.orangeAccent : Colors.redAccent),
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             // データ表示エリア
             Expanded(

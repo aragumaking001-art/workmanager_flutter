@@ -12,9 +12,6 @@ class TodaySummaryTab extends StatefulWidget {
 }
 
 class _TodaySummaryTabState extends State<TodaySummaryTab> {
-  List<String> _displayOrder = [];
-  String _lastOrderDate = "";
-
   final List<Map<String, String>> _cheerStaff = [
     {"name": "ネコ軍曹", "icon": "😸", "suffix": "ニャ！"},
     {"name": "イヌ隊長", "icon": "🐶", "suffix": "ワン！"},
@@ -62,11 +59,6 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
     List<String> weekdays = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"];
     String weekdayDisplay = weekdays[now.weekday - 1];
 
-    if (_lastOrderDate != todayStr) {
-      _displayOrder.clear();
-      _lastOrderDate = todayStr;
-    }
-
     List<ModelSummary> models = List.from(data.todayModels);
     
     int totalAir = models.fold(0, (sum, item) => sum + item.air);
@@ -96,28 +88,6 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
       cheerMsg = "爆速$sfx センター最強$sfx";
       cheerColor = Colors.purpleAccent;
     }
-
-    if (_displayOrder.isEmpty && models.isNotEmpty) {
-      models.sort((a, b) => b.totalFinished.compareTo(a.totalFinished));
-      _displayOrder = models.map((m) => "${m.name}_${m.maker}").toSet().toList();
-    } else if (models.isNotEmpty) {
-      var currentKeys = models.map((m) => "${m.name}_${m.maker}").toSet();
-      for (var key in currentKeys) {
-        if (!_displayOrder.contains(key)) {
-          _displayOrder.add(key);
-        }
-      }
-    }
-    
-    models.sort((a, b) {
-      String keyA = "${a.name}_${a.maker}";
-      String keyB = "${b.name}_${b.maker}";
-      int indexA = _displayOrder.indexOf(keyA);
-      int indexB = _displayOrder.indexOf(keyB);
-      if (indexA == -1) indexA = 9999;
-      if (indexB == -1) indexB = 9999;
-      return indexA.compareTo(indexB);
-    });
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F1115),
