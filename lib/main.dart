@@ -13,7 +13,9 @@ import 'tabs/summary_tab.dart';
 import 'tabs/today_summary_tab.dart';
 import 'tabs/total_ranking_tab.dart';
 import 'tabs/data_edit_tab.dart';
+import 'tabs/data_view_tab.dart';
 import 'tabs/personal_stats_tab.dart';
+import 'tabs/goal_list_tab.dart';
 
 // 💡 動作モードの定義
 enum AppMode { administrator, kiosk, manager }
@@ -294,25 +296,39 @@ class _KioskWaitScreenState extends State<KioskWaitScreen> {
 }
 
 // --- 🏠 メインメニュー画面（管理者・マネージャ共用） ---
-class MainLayout extends StatelessWidget {
+class MainLayout extends StatefulWidget {
   final AppMode appMode;
   const MainLayout({super.key, required this.appMode});
 
   @override
-  Widget build(BuildContext context) {
-    List<Widget> bottomCards = [];
+  State<MainLayout> createState() => _MainLayoutState();
+}
 
-    if (appMode == AppMode.administrator) {
-      bottomCards.add(
+class _MainLayoutState extends State<MainLayout> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    List<Widget> page1BottomCards = [];
+
+    if (widget.appMode == AppMode.administrator) {
+      page1BottomCards.add(
         _menuCard(
           context,
-          "個人別実績",
+          "個人別ステータス",
           Icons.person_search_rounded,
           Colors.orangeAccent,
           const PersonalStatsTab(isKioskMode: false),
         ),
       );
-      bottomCards.add(
+      page1BottomCards.add(
         _menuCard(
           context,
           "生産性",
@@ -322,26 +338,60 @@ class MainLayout extends StatelessWidget {
         ),
       );
     }
-    bottomCards.add(
+    page1BottomCards.add(
       _menuCard(
         context,
         "データ修正",
         Icons.edit_note_rounded,
         Colors.teal,
-        DataEditTab(isAdmin: appMode == AppMode.administrator),
+        DataEditTab(isAdmin: widget.appMode == AppMode.administrator),
+      ),
+    );
+    page1BottomCards.add(
+      _menuCard(
+        context,
+        "データ確認",
+        Icons.find_in_page_rounded,
+        Colors.indigoAccent,
+        const DataViewTab(),
       ),
     );
 
-    List<Widget> bottomRowChildren = [];
+    List<Widget> page1BottomRowChildren = [];
     for (int i = 0; i < 4; i++) {
-      if (i < bottomCards.length) {
-        bottomRowChildren.add(bottomCards[i]);
+      if (i < page1BottomCards.length) {
+        page1BottomRowChildren.add(page1BottomCards[i]);
       } else {
-        bottomRowChildren.add(const Expanded(child: SizedBox.shrink()));
+        page1BottomRowChildren.add(const Expanded(child: SizedBox.shrink()));
       }
 
       if (i < 3) {
-        bottomRowChildren.add(const SizedBox(width: 20));
+        page1BottomRowChildren.add(const SizedBox(width: 20));
+      }
+    }
+
+    // 2ページ目の構成
+    List<Widget> page2TopCards = [
+      _menuCard(context, "作業標準台数", Icons.flag_circle, Colors.pinkAccent, const GoalListTab()),
+      _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
+      _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
+      _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
+    ];
+    List<Widget> page2BottomCards = [
+      _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
+      _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
+      _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
+      _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
+    ];
+
+    List<Widget> page2TopRowChildren = [];
+    List<Widget> page2BottomRowChildren = [];
+    for (int i = 0; i < 4; i++) {
+      page2TopRowChildren.add(page2TopCards[i]);
+      page2BottomRowChildren.add(page2BottomCards[i]);
+      if (i < 3) {
+        page2TopRowChildren.add(const SizedBox(width: 20));
+        page2BottomRowChildren.add(const SizedBox(width: 20));
       }
     }
 
@@ -349,14 +399,14 @@ class MainLayout extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1A1C23),
         title: Text(
-          appMode == AppMode.administrator
+          widget.appMode == AppMode.administrator
               ? "和気センター 統合ダッシュボード [管理者]"
               : "和気センター 統合ダッシュボード [フロアマネージャ]",
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
         actions: [
-          if (appMode == AppMode.administrator)
+          if (widget.appMode == AppMode.administrator)
             Builder(
             builder: (ctx) => IconButton(
               icon: const Icon(Icons.download, color: Color(0xFF00CCFF), size: 30),
@@ -391,79 +441,108 @@ class MainLayout extends StatelessWidget {
           const SizedBox(width: 20),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 30.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  "フロア実績 (1F - 4F)",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF00CCFF),
+      body: Column(
+        children: [
+          Expanded(
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() => _currentPage = index);
+              },
+              children: [
+                // ページ1
+                SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 30.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            "フロア実績 (1F - 4F)",
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF00CCFF)),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            _menuCard(context, "1F 開梱・登録", Icons.unarchive_rounded, Colors.blueGrey, null),
+                            const SizedBox(width: 20),
+                            _menuCard(context, "2F 梱包・アダプタ", Icons.inventory_2_rounded, Colors.blueGrey, null),
+                            const SizedBox(width: 20),
+                            _menuCard(context, "3F 試験・検品", Icons.fact_check_rounded, Colors.blueGrey, null),
+                            const SizedBox(width: 20),
+                            _menuCard(context, "4F 筐体清掃", Icons.cleaning_services_rounded, const Color(0xFF00CCFF), const TabPageLayout()),
+                          ],
+                        ),
+                        const SizedBox(height: 40),
+                        const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            "分析・管理メニュー",
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.orangeAccent),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(children: page1BottomRowChildren),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-
-              Row(
-                children: [
-                  _menuCard(
-                    context,
-                    "1F 開梱・登録",
-                    Icons.unarchive_rounded,
-                    Colors.blueGrey,
-                    null,
-                  ),
-                  const SizedBox(width: 20),
-                  _menuCard(
-                    context,
-                    "2F 梱包・アダプタ",
-                    Icons.inventory_2_rounded,
-                    Colors.blueGrey,
-                    null,
-                  ),
-                  const SizedBox(width: 20),
-                  _menuCard(
-                    context,
-                    "3F 試験・検品",
-                    Icons.fact_check_rounded,
-                    Colors.blueGrey,
-                    null,
-                  ),
-                  const SizedBox(width: 20),
-                  _menuCard(
-                    context,
-                    "4F 筐体清掃",
-                    Icons.cleaning_services_rounded,
-                    const Color(0xFF00CCFF),
-                    const TabPageLayout(),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 40),
-              const FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  "分析・管理メニュー",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orangeAccent,
+                // ページ2
+                SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 30.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            "目標・拡張機能",
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.pinkAccent),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(children: page2TopRowChildren),
+                        const SizedBox(height: 40),
+                        const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            "追加機能枠",
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.grey),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(children: page2BottomRowChildren),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-
-              Row(children: bottomRowChildren),
-            ],
+              ],
+            ),
           ),
-        ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(2, (index) {
+                bool isActive = _currentPage == index;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.symmetric(horizontal: 5.0),
+                  height: 12.0,
+                  width: isActive ? 30.0 : 12.0,
+                  decoration: BoxDecoration(
+                    color: isActive ? const Color(0xFF00CCFF) : Colors.white24,
+                    borderRadius: BorderRadius.circular(6.0),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1013,7 +1013,7 @@ class _DataEditTabState extends State<DataEditTab> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text("作業者", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text("作業者", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 4),
                     PopupMenuButton<String>(
                       icon: const Icon(Icons.filter_list_rounded, color: Colors.cyanAccent, size: 20),
@@ -1037,12 +1037,12 @@ class _DataEditTabState extends State<DataEditTab> {
                   ],
                 ),
               ),
-              const Expanded(flex: 3, child: Text("機種名", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
-              const Expanded(flex: 2, child: Text("作業区分", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
-              const Expanded(flex: 2, child: Text("内容１", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
-              const Expanded(flex: 2, child: Text("内容２", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))),
-              const Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("作業時間", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)))),
-              const Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("編集", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)))),
+              const Expanded(flex: 3, child: Text("機種名", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+              const Expanded(flex: 2, child: Text("作業区分", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+              const Expanded(flex: 2, child: Text("内容１", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+              const Expanded(flex: 2, child: Text("内容２", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+              const Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("作業時間", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+              const Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("編集", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
             ],
           ),
         ),

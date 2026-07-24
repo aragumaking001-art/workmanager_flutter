@@ -1,0 +1,544 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:mysql_client/mysql_client.dart';
+import 'package:table_calendar/table_calendar.dart';
+import 'package:provider/provider.dart';
+import '../providers/data_provider.dart';
+
+class DataViewTab extends StatefulWidget {
+  const DataViewTab({super.key});
+
+  @override
+  State<DataViewTab> createState() => _DataViewTabState();
+}
+
+class _DataViewTabState extends State<DataViewTab> {
+  DateTime _selectedDate = DateTime.now();
+  List<Map<String, dynamic>> _logs = [];
+  bool _isFetching = false;
+  String? _selectedWorkerFilter;
+
+  List<String> get _uniqueWorkers {
+    Set<String> workers = {};
+    for (var log in _logs) {
+      workers.add(log['worker_name'] ?? log['worker_id'] ?? "不明");
+    }
+    List<String> sorted = workers.toList()..sort();
+    sorted.insert(0, "すべて");
+    return sorted;
+  }
+
+  List<Map<String, dynamic>> get _filteredLogs {
+    if (_selectedWorkerFilter == null || _selectedWorkerFilter == "すべて") {
+      return _logs;
+    }
+    return _logs.where((log) {
+      String w = log['worker_name'] ?? log['worker_id'] ?? "不明";
+      return w == _selectedWorkerFilter;
+    }).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLogs(_selectedDate);
+  }
+
+  Future<void> _fetchLogs(DateTime targetDate) async {
+    setState(() {
+      _isFetching = true;
+    });
+
+    final conn = await MySQLConnection.createConnection(
+      host: '192.168.10.101',
+      port: 3306,
+      userName: 'work_user',
+      password: 'work1234',
+      databaseName: 'work_manager_db',
+    );
+    try {
+      await conn.connect();
+      String dateStr = DateFormat('yyyy-MM-dd').format(targetDate);
+      var result = await conn.execute('''
+        SELECT 
+          l.id, l.work_date, l.model_name, l.maker, l.maker_abbr, l.worker_id, 
+          l.clean_qty, l.air_clean_qty, l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty,
+          l.start_time_str, l.end_time_str, l.work_minutes, l.edit_count,
+          mem.worker_name
+        FROM unit_cleaning_logs l
+        LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
+        WHERE DATE(l.work_date) = :d 
+        ORDER BY l.id DESC
+      ''', {"d": dateStr});
+
+      List<Map<String, dynamic>> temp = [];
+      for (var row in result.rows) {
+        temp.add(row.assoc());
+      }
+      _logs = temp;
+    } catch (e) {
+      print("ログ取得エラー: $e");
+    } finally {
+      await conn.close();
+      setState(() => _isFetching = false);
+    }
+  }
+
+  Future<void> _showCalendarDialog() async {
+    DateTime focusedDay = _selectedDate;
+    DateTime? selectedDay = _selectedDate;
+
+    final result = await showDialog<DateTime>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            List<int> years = List.generate(10, (i) => DateTime.now().year - 5 + i);
+            List<int> months = List.generate(12, (i) => i + 1);
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF2A2D35),
+              title: const Text("日付を選択", style: TextStyle(color: Colors.white)),
+              content: SizedBox(
+                width: 500,
+                height: 500,
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            dropdownColor: const Color(0xFF2A2D35),
+                            value: focusedDay.year,
+                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                            items: years.map((y) {
+                              return DropdownMenuItem(value: y, child: Text("$y年"));
+                            }).toList(),
+                            onChanged: (newYear) {
+                              if (newYear != null) {
+                                setDialogState(() {
+                                  focusedDay = DateTime(newYear, focusedDay.month, 1);
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            dropdownColor: const Color(0xFF2A2D35),
+                            value: focusedDay.month,
+                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
+                            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                            items: months.map((m) {
+                              return DropdownMenuItem(value: m, child: Text("$m月"));
+                            }).toList(),
+                            onChanged: (newMonth) {
+                              if (newMonth != null) {
+                                setDialogState(() {
+                                  focusedDay = DateTime(focusedDay.year, newMonth, 1);
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: TableCalendar(
+                          locale: 'ja_JP',
+                          firstDay: DateTime(2020),
+                          lastDay: DateTime.now(),
+                          focusedDay: focusedDay,
+                          selectedDayPredicate: (day) {
+                            return isSameDay(selectedDay, day);
+                          },
+                          onDaySelected: (newSelectedDay, newFocusedDay) {
+                            setDialogState(() {
+                              selectedDay = newSelectedDay;
+                              focusedDay = newFocusedDay;
+                            });
+                          },
+                          calendarStyle: const CalendarStyle(
+                            selectedDecoration: BoxDecoration(color: Color(0xFF00FFCC), shape: BoxShape.circle),
+                            todayDecoration: BoxDecoration(color: Colors.white10, shape: BoxShape.circle),
+                            defaultTextStyle: TextStyle(color: Colors.white, fontSize: 22),
+                            outsideTextStyle: TextStyle(color: Colors.white24, fontSize: 22),
+                            weekendTextStyle: TextStyle(color: Colors.redAccent, fontSize: 22),
+                          ),
+                          calendarBuilders: CalendarBuilders(
+                            dowBuilder: (context, day) {
+                              if (day.weekday == DateTime.saturday) {
+                                return const Center(child: Text('土', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 20)));
+                              }
+                              if (day.weekday == DateTime.sunday) {
+                                return const Center(child: Text('日', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 20)));
+                              }
+                              return null;
+                            },
+                            defaultBuilder: (context, day, newFocusedDay) {
+                              if (day.weekday == DateTime.saturday) {
+                                return Center(child: Text('${day.day}', style: const TextStyle(color: Colors.blueAccent, fontSize: 22)));
+                              }
+                              return null;
+                            },
+                          ),
+                          daysOfWeekHeight: 50,
+                          headerStyle: const HeaderStyle(
+                            formatButtonVisible: false,
+                            titleCentered: true,
+                            leftChevronIcon: Icon(Icons.chevron_left, color: Colors.white),
+                            rightChevronIcon: Icon(Icons.chevron_right, color: Colors.white),
+                            titleTextStyle: TextStyle(color: Colors.white, fontSize: 20),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("キャンセル", style: TextStyle(color: Colors.white70, fontSize: 18)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00FFCC), foregroundColor: Colors.black),
+                  onPressed: () {
+                    if (selectedDay != null) {
+                      Navigator.pop(context, selectedDay);
+                    }
+                  },
+                  child: const Text("確定", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedDate = result;
+      });
+      _fetchLogs(_selectedDate);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F1115),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1A1C23),
+        title: const Text("データ確認", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, size: 28),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.calendar_month),
+              label: Text(
+                DateFormat('yyyy年MM月dd日').format(_selectedDate),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00CCFF),
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+              ),
+              onPressed: _showCalendarDialog,
+            ),
+          ),
+          const Center(child: _ConnectionStatusIndicator()), 
+          const SizedBox(width: 20),
+        ],
+      ),
+      body: Container(
+        color: const Color(0xFF0F1115),
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+          Expanded(
+            child: _isFetching
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF00CCFF)))
+                : _logs.isEmpty
+                    ? const Center(child: Text("データがありません", style: TextStyle(color: Colors.white70, fontSize: 18)))
+                    : Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF1A1C23),
+                              border: Border(bottom: BorderSide(color: Color(0xFF00CCFF), width: 2)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 2, 
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Text("作業者", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)),
+                                      const SizedBox(width: 4),
+                                      PopupMenuButton<String>(
+                                        icon: const Icon(Icons.filter_list_rounded, color: Colors.cyanAccent, size: 20),
+                                        color: const Color(0xFF1A1C23),
+                                        tooltip: "作業者で絞り込み",
+                                        onSelected: (val) {
+                                          setState(() {
+                                            _selectedWorkerFilter = val == "すべて" ? null : val;
+                                          });
+                                        },
+                                        itemBuilder: (context) {
+                                          return _uniqueWorkers.map((w) {
+                                            bool isSelected = (w == "すべて" && _selectedWorkerFilter == null) || w == _selectedWorkerFilter;
+                                            return PopupMenuItem<String>(
+                                              value: w,
+                                              child: Text(w, style: TextStyle(color: isSelected ? Colors.cyanAccent : Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                                            );
+                                          }).toList();
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(flex: 3, child: Text("機種名", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+                                Expanded(flex: 2, child: Text("作業区分", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+                                Expanded(flex: 1, child: Text("内容１", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+                                Expanded(flex: 1, child: Text("内容２", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+                                Expanded(flex: 2, child: Align(alignment: Alignment.center, child: Text("時間(開始-終了)", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+                                Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("作業時間", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+                                Expanded(flex: 2, child: Align(alignment: Alignment.center, child: Text("生産性", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: _filteredLogs.length,
+                              itemBuilder: (context, index) {
+                                var log = _filteredLogs[index];
+                                bool isEven = index % 2 == 0;
+                                String workerName = log['worker_name'] ?? log['worker_id'] ?? "不明";
+                                
+                                String rawModelName = log['model_name']?.toString() ?? "不明";
+                                String cleanModelName = rawModelName.contains(':') ? rawModelName.split(':').last.replaceAll('}', '').trim() : rawModelName;
+                                String makerAbbr = log['maker_abbr']?.toString() ?? ""; 
+                                String displayModelName = makerAbbr.isNotEmpty && makerAbbr != "null" ? "$cleanModelName ($makerAbbr)" : cleanModelName;
+                                
+                                int airQty = int.tryParse(log['air_clean_qty']?.toString() ?? '0') ?? 0;
+                                int cleanQty = int.tryParse(log['clean_qty']?.toString() ?? '0') ?? 0;
+                                int toCleanQty = int.tryParse(log['to_clean_qty']?.toString() ?? '0') ?? 0;
+                                int toSwapQty = int.tryParse(log['to_swap_qty']?.toString() ?? '0') ?? 0;
+                                
+                                String mainLabel = "";
+                                int mainQty = 0;
+                                String subLabel = "";
+                                int subQty = 0;
+                                Color accentColor = const Color(0xFF00CCFF);
+
+                                if (airQty > 0) {
+                                  mainLabel = "エアー清掃"; mainQty = airQty;
+                                  subLabel = "清掃行き"; subQty = toCleanQty;
+                                  accentColor = const Color(0xFF00CCFF);
+                                } else if (cleanQty > 0) {
+                                  mainLabel = "通常清掃"; mainQty = cleanQty;
+                                  subLabel = "交換行き"; subQty = toSwapQty;
+                                  accentColor = const Color(0xFF00FFCC);
+                                } else {
+                                  mainLabel = "筐体交換"; mainQty = int.tryParse(log['swap_qty']?.toString() ?? '0') ?? 0;
+                                  subLabel = "その他"; subQty = 0;
+                                  accentColor = Colors.amber;
+                                }
+
+                                double workMinutes = double.tryParse(log['work_minutes']?.toString() ?? '0') ?? 0.0;
+                                int stdQty = int.tryParse(log['std_qty']?.toString() ?? '0') ?? 0;
+                                
+                                int totalMin = workMinutes.round();
+                                int h = totalMin ~/ 60;
+                                int m = totalMin % 60;
+                                String timeDisplay = h > 0 ? "${h}時間\n${m}分" : "${m}分";
+                                
+                                String startTime = log['start_time_str']?.toString() ?? "-";
+                                String endTime = log['end_time_str']?.toString() ?? "-";
+                                String timeRange = "$startTime\n- $endTime";
+
+                                Widget productivityWidget = const Text("-", style: TextStyle(fontSize: 18, color: Colors.white70));
+                                if (workMinutes > 0 && stdQty > 0 && mainQty > 0) {
+                                  double hours = workMinutes / 60.0;
+                                  double actualPerHour = mainQty / hours;
+                                  int prodPercent = (actualPerHour / stdQty * 100).round();
+                                  
+                                  Color prodColor;
+                                  IconData prodIcon;
+                                  if (prodPercent >= 100) {
+                                    prodColor = Colors.greenAccent;
+                                    prodIcon = Icons.trending_up;
+                                  } else if (prodPercent >= 80) {
+                                    prodColor = Colors.yellowAccent;
+                                    prodIcon = Icons.trending_flat;
+                                  } else {
+                                    prodColor = Colors.redAccent;
+                                    prodIcon = Icons.trending_down;
+                                  }
+                                  
+                                  productivityWidget = Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(prodIcon, color: prodColor, size: 32),
+                                      const SizedBox(width: 8),
+                                      Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text("実績: ${actualPerHour.toStringAsFixed(1)}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: prodColor)),
+                                          Text("目標: $stdQty.0", style: const TextStyle(fontSize: 14, color: Colors.white70)),
+                                        ],
+                                      ),
+                                    ],
+                                  );
+                                }
+                                
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: isEven ? const Color(0xFF0F1115) : const Color(0xFF14161C),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0), 
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 2, 
+                                          child: Text(workerName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis), 
+                                        ),
+                                        Expanded(
+                                          flex: 3,
+                                          child: Text(displayModelName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis), 
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(mainLabel, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: accentColor)),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: _compactInfoChip("台数", mainQty, accentColor),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: subLabel != "その他" 
+                                                ? _compactInfoChip(
+                                                    subLabel, 
+                                                    subQty, 
+                                                    (subLabel == "清掃行き") ? Colors.cyanAccent : Colors.orangeAccent,
+                                                  ) 
+                                                : const SizedBox(),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Align(
+                                            alignment: Alignment.center,
+                                            child: Text(timeRange, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center)
+                                          ), 
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Align(
+                                            alignment: Alignment.center,
+                                            child: Text(timeDisplay, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center)
+                                          ), 
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Align(
+                                            alignment: Alignment.center,
+                                            child: productivityWidget
+                                          ), 
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+  Widget _compactInfoChip(String label, dynamic countOrText, Color color, {bool isText = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), 
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        border: Border.all(color: color.withOpacity(0.5)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)))), 
+          const SizedBox(width: 8),
+          FittedBox(fit: BoxFit.scaleDown, child: Text(countOrText.toString(), style: TextStyle(color: color, fontSize: isText ? 16 : 20, fontWeight: FontWeight.bold))), 
+        ],
+      ),
+    );
+  }
+}
+
+class _ConnectionStatusIndicator extends StatelessWidget {
+  const _ConnectionStatusIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    final data = context.watch<DataProvider>();
+    final bool isOnline = data.isOnline;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isOnline ? Colors.greenAccent.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: isOnline ? Colors.greenAccent : Colors.redAccent, width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isOnline ? Icons.wifi : Icons.wifi_off,
+            color: isOnline ? Colors.greenAccent : Colors.redAccent,
+            size: 16,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isOnline ? "Online" : "Offline",
+            style: TextStyle(
+              color: isOnline ? Colors.greenAccent : Colors.redAccent,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

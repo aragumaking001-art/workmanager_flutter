@@ -376,7 +376,7 @@ class _PersonalStatsTabState extends State<PersonalStatsTab> with SingleTickerPr
                     builder: (context, child) {
                       List<double> animStats = stats.map((e) => e * _animValue.value).toList();
                       return CustomPaint(
-                        painter: RadarChartPainter(animStats, labels, const Color(0xFF00FFCC)),
+                        painter: RadarChartPainter(animStats, stats, labels, const Color(0xFF00FFCC)),
                       );
                     },
                   ),
@@ -484,10 +484,11 @@ class _PersonalStatsTabState extends State<PersonalStatsTab> with SingleTickerPr
 // ----------------------------------------------------
 class RadarChartPainter extends CustomPainter {
   final List<double> values;
+  final List<double> targetValues;
   final List<String> labels;
   final Color color;
 
-  RadarChartPainter(this.values, this.labels, this.color);
+  RadarChartPainter(this.values, this.targetValues, this.labels, this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -550,9 +551,12 @@ class RadarChartPainter extends CustomPainter {
       final x = center.dx + r * math.cos(angle * j - math.pi / 2);
       final y = center.dy + r * math.sin(angle * j - math.pi / 2);
 
+      int score = (targetValues[j] * 100).round();
       textPainter.text = TextSpan(
-        text: labels[j],
-        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+        children: [
+          TextSpan(text: "${labels[j]}\n", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          TextSpan(text: "$score", style: const TextStyle(color: Colors.cyanAccent, fontSize: 20, fontWeight: FontWeight.bold)),
+        ],
       );
       textPainter.layout();
       
