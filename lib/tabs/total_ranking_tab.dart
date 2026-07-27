@@ -39,19 +39,20 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
     final result = await showDialog<Map<String, DateTime?>>(
       context: context,
       builder: (context) {
+        final data = context.watch<DataProvider>();
+        final isWhite = data.displayMode == DisplayMode.pureWhite;
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return Center(
               child: Container(
-                // 💡 固定サイズをやめ、画面の90%（ただし最大550x700）に制限
                 constraints: const BoxConstraints(maxWidth: 550, maxHeight: 700),
                 width: MediaQuery.of(context).size.width * 0.9,
                 height: MediaQuery.of(context).size.height * 0.9,
                 padding: const EdgeInsets.all(25),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1C23),
+                  color: data.currentCardColor,
                   borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: const Color(0xFF00FFCC), width: 2),
+                  border: Border.all(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), width: 2),
                 ),
                 child: Material(
                   color: Colors.transparent,
@@ -59,9 +60,9 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                     children: [
                       FittedBox(
                         fit: BoxFit.scaleDown,
-                        child: const Text(
+                        child: Text(
                           "ランキング期間選択",
-                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: data.mainTextColor),
                         ),
                       ),
                       const SizedBox(height: 15),
@@ -72,17 +73,17 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white10,
+                              color: isWhite ? Colors.grey.shade200 : Colors.white10,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: DropdownButton<int>(
                               value: _focusedDay.year,
-                              dropdownColor: const Color(0xFF252830),
+                              dropdownColor: isWhite ? Colors.white : const Color(0xFF252830),
                               underline: const SizedBox(),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
-                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                              icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC)),
+                              style: TextStyle(color: data.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold),
                               items: years.map((y) {
-                                return DropdownMenuItem(value: y, child: Text("$y年"));
+                                return DropdownMenuItem(value: y, child: Text("$y年", style: TextStyle(color: data.mainTextColor)));
                               }).toList(),
                               onChanged: (newYear) {
                                 if (newYear != null) {
@@ -97,17 +98,17 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white10,
+                              color: isWhite ? Colors.grey.shade200 : Colors.white10,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: DropdownButton<int>(
                               value: _focusedDay.month,
-                              dropdownColor: const Color(0xFF252830),
+                              dropdownColor: isWhite ? Colors.white : const Color(0xFF252830),
                               underline: const SizedBox(),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
-                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                              icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC)),
+                              style: TextStyle(color: data.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold),
                               items: months.map((m) {
-                                return DropdownMenuItem(value: m, child: Text("$m月"));
+                                return DropdownMenuItem(value: m, child: Text("$m月", style: TextStyle(color: data.mainTextColor)));
                               }).toList(),
                               onChanged: (newMonth) {
                                 if (newMonth != null) {
@@ -122,7 +123,6 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                       ),
                       const SizedBox(height: 10),
 
-                      // 💡 小さい画面でもカレンダーが縮小して収まるようにする
                       Expanded(
                         child: SingleChildScrollView(
                           child: TableCalendar(
@@ -140,14 +140,14 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                                 _focusedDay = focusedDay;
                               });
                             },
-                            calendarStyle: const CalendarStyle(
-                              rangeStartDecoration: BoxDecoration(color: Color(0xFF00FFCC), shape: BoxShape.circle),
-                              rangeEndDecoration: BoxDecoration(color: Color(0xFF00FFCC), shape: BoxShape.circle),
-                              rangeHighlightColor: Color(0x3300CCFF),
-                              todayDecoration: BoxDecoration(color: Colors.white10, shape: BoxShape.circle),
-                              defaultTextStyle: TextStyle(color: Colors.white, fontSize: 22),
-                              outsideTextStyle: TextStyle(color: Colors.white24, fontSize: 22),
-                              weekendTextStyle: TextStyle(color: Colors.redAccent, fontSize: 22),
+                            calendarStyle: CalendarStyle(
+                              rangeStartDecoration: BoxDecoration(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), shape: BoxShape.circle),
+                              rangeEndDecoration: BoxDecoration(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), shape: BoxShape.circle),
+                              rangeHighlightColor: isWhite ? const Color(0xFF007799).withOpacity(0.15) : const Color(0x3300CCFF),
+                              todayDecoration: BoxDecoration(color: isWhite ? Colors.grey.shade300 : Colors.white10, shape: BoxShape.circle),
+                              defaultTextStyle: TextStyle(color: data.mainTextColor, fontSize: 22),
+                              outsideTextStyle: TextStyle(color: data.subTextColor, fontSize: 22),
+                              weekendTextStyle: const TextStyle(color: Colors.redAccent, fontSize: 22),
                             ),
                             calendarBuilders: CalendarBuilders(
                               dowBuilder: (context, day) {
@@ -167,13 +167,13 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                               },
                             ),
                             daysOfWeekHeight: 50,
-                            headerStyle: const HeaderStyle(
+                            headerStyle: HeaderStyle(
                               formatButtonVisible: false,
                               titleCentered: true,
-                              titleTextStyle: TextStyle(fontSize: 0), 
-                              leftChevronIcon: Icon(Icons.chevron_left, color: Color(0xFF00FFCC), size: 40),
-                              rightChevronIcon: Icon(Icons.chevron_right, color: Color(0xFF00FFCC), size: 40),
-                              headerMargin: EdgeInsets.only(bottom: 5),
+                              titleTextStyle: const TextStyle(fontSize: 0), 
+                              leftChevronIcon: Icon(Icons.chevron_left, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), size: 40),
+                              rightChevronIcon: Icon(Icons.chevron_right, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), size: 40),
+                              headerMargin: const EdgeInsets.only(bottom: 5),
                             ),
                             onPageChanged: (focusedDay) {
                                setDialogState(() {
@@ -190,13 +190,13 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                         children: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text("キャンセル", style: TextStyle(color: Colors.white54, fontSize: 20)),
+                            child: Text("キャンセル", style: TextStyle(color: data.subTextColor, fontSize: 20)),
                           ),
                           const SizedBox(width: 30),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00FFCC),
-                              foregroundColor: Colors.black,
+                              backgroundColor: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC),
+                              foregroundColor: isWhite ? Colors.white : Colors.black,
                               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                             ),
                             onPressed: () {
@@ -267,6 +267,7 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
   @override
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
+    final isWhite = data.displayMode == DisplayMode.pureWhite;
     String periodStr = "(${DateFormat('MM/dd').format(_startDate)} ～ ${DateFormat('MM/dd').format(_endDate)})";
 
     Map<String, WorkerRank> combinedMap = {};
@@ -294,20 +295,20 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1115),
+      backgroundColor: data.currentBgColor,
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Container(
           padding: const EdgeInsets.all(25),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1C23),
+            color: data.currentCardColor,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF33363F)),
+            border: Border.all(color: data.borderColor),
+            boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 3))] : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- 💡 ヘッダー部分：FittedBoxとExpandedで溢れを防止 ---
               Row(
                 children: [
                   const Icon(Icons.emoji_events_rounded, color: Color(0xFFFFD700), size: 36),
@@ -318,9 +319,9 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                       alignment: Alignment.centerLeft,
                       child: Row(
                         children: [
-                          const Text("4F 作業ランキング", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+                          Text("4F 作業ランキング", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: data.mainTextColor)),
                           const SizedBox(width: 10),
-                          Text(periodStr, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white70)),
+                          Text(periodStr, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: data.subTextColor)),
                         ],
                       ),
                     ),
@@ -342,12 +343,12 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                       },
                       style: ButtonStyle(
                         backgroundColor: MaterialStateProperty.resolveWith<Color>((states) {
-                          if (states.contains(MaterialState.selected)) return const Color(0xFF00CCFF).withOpacity(0.2);
+                          if (states.contains(MaterialState.selected)) return isWhite ? const Color(0xFF007799).withOpacity(0.15) : const Color(0xFF00CCFF).withOpacity(0.2);
                           return Colors.transparent;
                         }),
                         foregroundColor: MaterialStateProperty.resolveWith<Color>((states) {
-                          if (states.contains(MaterialState.selected)) return const Color(0xFF00CCFF);
-                          return Colors.white54;
+                          if (states.contains(MaterialState.selected)) return isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF);
+                          return data.subTextColor;
                         }),
                       ),
                     ),
@@ -356,19 +357,17 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
               ),
               const SizedBox(height: 25),
 
-              // --- ランキング本体 ---
               Expanded(
                 child: data.isLoading
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF00CCFF)))
+                    ? Center(child: CircularProgressIndicator(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF)))
                     : Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _buildRankColumn(columnsData[ 0 ], 0, maxPt)),
-                          // 💡 区切り線の余白を少しだけ減らしてスペース確保
-                          const VerticalDivider(color: Color(0xFF33363F), width: 30, thickness: 1),
-                          Expanded(child: _buildRankColumn(columnsData[ 1 ], 10, maxPt)),
-                          const VerticalDivider(color: Color(0xFF33363F), width: 30, thickness: 1),
-                          Expanded(child: _buildRankColumn(columnsData[ 2 ], 20, maxPt)),
+                          Expanded(child: _buildRankColumn(columnsData[ 0 ], 0, maxPt, data, isWhite)),
+                          VerticalDivider(color: data.borderColor, width: 30, thickness: 1),
+                          Expanded(child: _buildRankColumn(columnsData[ 1 ], 10, maxPt, data, isWhite)),
+                          VerticalDivider(color: data.borderColor, width: 30, thickness: 1),
+                          Expanded(child: _buildRankColumn(columnsData[ 2 ], 20, maxPt, data, isWhite)),
                         ],
                       ),
               ),
@@ -379,8 +378,7 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
     );
   }
 
-  // 💡 1列分のランキングを描画
-  Widget _buildRankColumn(List<WorkerRank> ranks, int startIndex, double maxPt) {
+  Widget _buildRankColumn(List<WorkerRank> ranks, int startIndex, double maxPt, DataProvider data, bool isWhite) {
     return ListView.separated(
       itemCount: ranks.length,
       separatorBuilder: (context, index) => const SizedBox(height: 18),
@@ -389,11 +387,11 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
         int globalIndex = startIndex + index;
         
         String emoji = "";
-        Color barColor = const Color(0xFF00CCFF);
+        Color barColor = isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF);
         
-        if (globalIndex == 0) { emoji = "🥇 "; barColor = const Color(0xFFFFD700); } 
-        else if (globalIndex == 1) { emoji = "🥈 "; barColor = const Color(0xFFC0C0C0); } 
-        else if (globalIndex == 2) { emoji = "🥉 "; barColor = const Color(0xFFCD7F32); }
+        if (globalIndex == 0) { emoji = "🥇 "; barColor = isWhite ? Colors.amber.shade800 : const Color(0xFFFFD700); } 
+        else if (globalIndex == 1) { emoji = "🥈 "; barColor = isWhite ? Colors.blueGrey.shade500 : const Color(0xFFC0C0C0); } 
+        else if (globalIndex == 2) { emoji = "🥉 "; barColor = isWhite ? const Color(0xFFB06020) : const Color(0xFFCD7F32); }
 
         double percent = (r.points / maxPt).clamp(0.0, 1.0);
 
@@ -410,9 +408,9 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                     children: [
                       Flexible(
                         child: Text(r.name, overflow: TextOverflow.ellipsis, 
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: data.mainTextColor)),
                       ),
-                      const Text(" さん", style: TextStyle(fontSize: 14, color: Colors.white38)),
+                      Text(" さん", style: TextStyle(fontSize: 14, color: data.subTextColor)),
                       if (r.isLucky)
                         const Padding(
                           padding: EdgeInsets.only(left: 4, bottom: 4),
@@ -422,7 +420,6 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
                   ),
                 ),
                 const SizedBox(width: 5),
-                // 💡 ポイントのテキストが長くなっても名前を押し潰して溢れないよう、最大幅を決めてFittedBoxで縮小させる
                 Container(
                   constraints: const BoxConstraints(maxWidth: 90),
                   alignment: Alignment.bottomRight,
@@ -437,7 +434,7 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
             const SizedBox(height: 5),
             Stack(
               children: [
-                Container(height: 18, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(10))),
+                Container(height: 18, decoration: BoxDecoration(color: isWhite ? Colors.grey.shade200 : Colors.white10, borderRadius: BorderRadius.circular(10))),
                 TweenAnimationBuilder<double>(
                   tween: Tween<double>(begin: 0, end: percent),
                   duration: const Duration(milliseconds: 1000),

@@ -5,7 +5,7 @@ import 'package:mysql_client/mysql_client.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../providers/data_provider.dart';
 
-enum EditMode { menu, today, past }
+enum EditMode { menu, today, previousDay, past }
 
 class DataEditTab extends StatefulWidget {
   final bool isAdmin; 
@@ -21,6 +21,7 @@ class _DataEditTabState extends State<DataEditTab> {
   List<Map<String, dynamic>> _dayLogs = [];
   bool _isFetching = false;
   DateTime? _selectedPastDate;
+  DateTime? _selectedPrevDate;
 
   String? _selectedWorkerFilter;
 
@@ -125,6 +126,7 @@ class _DataEditTabState extends State<DataEditTab> {
 
   void _showConfirmUpdateDialog(Map<String, dynamic> oldLog, Map<String, dynamic> newData, int id, String targetWorkType) {
     final provider = Provider.of<DataProvider>(context, listen: false);
+    final bool isWhite = provider.displayMode == DisplayMode.pureWhite;
     String workerName = oldLog['worker_name'] ?? oldLog['worker_id'] ?? "不明";
 
     int oldAir = int.tryParse(oldLog['air_clean_qty'] ?? '0') ?? 0;
@@ -142,15 +144,15 @@ class _DataEditTabState extends State<DataEditTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1A1C23),
+          backgroundColor: provider.currentCardColor,
           title: Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 36),
+              Icon(Icons.warning_amber_rounded, color: isWhite ? Colors.orange.shade800 : Colors.orangeAccent, size: 36),
               const SizedBox(width: 12),
               Flexible(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: const Text("修正内容の最終確認", style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                  child: Text("修正内容の最終確認", style: TextStyle(color: provider.mainTextColor, fontSize: 26, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -163,31 +165,31 @@ class _DataEditTabState extends State<DataEditTab> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("作業者: $workerName", style: const TextStyle(color: Color(0xFF00CCFF), fontSize: 20, fontWeight: FontWeight.bold)), 
+                  Text("作業者: $workerName", style: TextStyle(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), fontSize: 20, fontWeight: FontWeight.bold)), 
                   const SizedBox(height: 20),
                   
                   Row(
-                    children: const [
-                      Expanded(flex: 3, child: SizedBox()), 
-                      Expanded(flex: 4, child: Center(child: Text("修正前", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)))),
-                      Expanded(flex: 1, child: SizedBox()),
-                      Expanded(flex: 4, child: Center(child: Text("修正後", style: TextStyle(color: Colors.greenAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+                    children: [
+                      const Expanded(flex: 3, child: SizedBox()), 
+                      Expanded(flex: 4, child: Center(child: Text("修正前", style: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)))),
+                      const Expanded(flex: 1, child: SizedBox()),
+                      Expanded(flex: 4, child: Center(child: Text("修正後", style: TextStyle(color: isWhite ? const Color(0xFF008040) : Colors.greenAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
                     ],
                   ),
-                  const Divider(color: Colors.white24, height: 25),
+                  Divider(color: provider.borderColor, height: 25),
 
-                  _buildCompareRow("作業区分", oldWorkType, targetWorkType, isText: true),
-                  _buildCompareRow("機種名", oldModelDisplay, newModelDisplay, isText: true),
-                  _buildCompareRow("作業時間(分)", double.tryParse(oldLog['work_minutes']?.toString() ?? '0') ?? 0, newData['work_minutes']),
+                  _buildCompareRow("作業区分", oldWorkType, targetWorkType, provider, isWhite, isText: true),
+                  _buildCompareRow("機種名", oldModelDisplay, newModelDisplay, provider, isWhite, isText: true),
+                  _buildCompareRow("作業時間(分)", double.tryParse(oldLog['work_minutes']?.toString() ?? '0') ?? 0, newData['work_minutes'], provider, isWhite),
                   
                   if (targetWorkType == "エアー清掃") ...[
-                    _buildCompareRow("エアー清掃", int.tryParse(oldLog['air_clean_qty'] ?? '0') ?? 0, newData['air_clean_qty']),
-                    _buildCompareRow("清掃行き", int.tryParse(oldLog['to_clean_qty'] ?? '0') ?? 0, newData['to_clean_qty']),
+                    _buildCompareRow("エアー清掃", int.tryParse(oldLog['air_clean_qty'] ?? '0') ?? 0, newData['air_clean_qty'], provider, isWhite),
+                    _buildCompareRow("清掃行き", int.tryParse(oldLog['to_clean_qty'] ?? '0') ?? 0, newData['to_clean_qty'], provider, isWhite),
                   ] else if (targetWorkType == "清掃") ...[
-                    _buildCompareRow("通常清掃", int.tryParse(oldLog['clean_qty'] ?? '0') ?? 0, newData['clean_qty']),
-                    _buildCompareRow("筐体交換行き", int.tryParse(oldLog['to_swap_qty'] ?? '0') ?? 0, newData['to_swap_qty']),
+                    _buildCompareRow("通常清掃", int.tryParse(oldLog['clean_qty'] ?? '0') ?? 0, newData['clean_qty'], provider, isWhite),
+                    _buildCompareRow("筐体交換行き", int.tryParse(oldLog['to_swap_qty'] ?? '0') ?? 0, newData['to_swap_qty'], provider, isWhite),
                   ] else if (targetWorkType == "筐体交換") ...[
-                    _buildCompareRow("交換完了", int.tryParse(oldLog['swap_qty'] ?? '0') ?? 0, newData['swap_qty']),
+                    _buildCompareRow("交換完了", int.tryParse(oldLog['swap_qty'] ?? '0') ?? 0, newData['swap_qty'], provider, isWhite),
                   ],
                 ],
               ),
@@ -196,16 +198,16 @@ class _DataEditTabState extends State<DataEditTab> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context), 
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                child: Text("入力に戻る", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)), 
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                child: Text("入力に戻る", style: TextStyle(color: provider.mainTextColor, fontSize: 18, fontWeight: FontWeight.bold)), 
               )
             ),
             const SizedBox(width: 10),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00FFCC), 
-                foregroundColor: Colors.black,
+                backgroundColor: isWhite ? const Color(0xFF00AA66) : const Color(0xFF00FFCC), 
+                foregroundColor: isWhite ? Colors.white : Colors.black,
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15) 
               ),
               onPressed: () async {
@@ -258,6 +260,8 @@ class _DataEditTabState extends State<DataEditTab> {
                   ).then((_) {
                     if (_currentMode == EditMode.today) {
                       _fetchLogs(DateTime.now());
+                    } else if (_currentMode == EditMode.previousDay && _selectedPrevDate != null) {
+                      _fetchLogs(_selectedPrevDate!);
                     } else if (_currentMode == EditMode.past && _selectedPastDate != null) {
                       _fetchLogs(_selectedPastDate!);
                     }
@@ -272,7 +276,7 @@ class _DataEditTabState extends State<DataEditTab> {
     );
   }
 
-  Widget _buildCompareRow(String label, dynamic oldVal, dynamic newVal, {bool isText = false}) {
+  Widget _buildCompareRow(String label, dynamic oldVal, dynamic newVal, DataProvider provider, bool isWhite, {bool isText = false}) {
     bool isChanged = oldVal.toString() != newVal.toString();
 
     return Padding(
@@ -281,41 +285,42 @@ class _DataEditTabState extends State<DataEditTab> {
         children: [
           Expanded(
             flex: 3, 
-            child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)) 
+            child: Text(label, style: TextStyle(color: provider.mainTextColor, fontSize: 16, fontWeight: FontWeight.bold)) 
           ),
           Expanded(
             flex: 4,
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white10, 
-                borderRadius: BorderRadius.circular(8)
+                color: isWhite ? Colors.grey.shade100 : Colors.white10, 
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: provider.borderColor),
               ),
               child: Center(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text(oldVal.toString(), style: TextStyle(fontSize: isText ? 16 : 24, color: Colors.white, fontWeight: FontWeight.bold), textAlign: TextAlign.center)
+                  child: Text(oldVal.toString(), style: TextStyle(fontSize: isText ? 16 : 24, color: provider.mainTextColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center)
                 ),
               ),
             )
           ),
           Expanded(
             flex: 1,
-            child: Icon(Icons.arrow_forward_rounded, size: 24, color: isChanged ? Colors.orangeAccent : Colors.white54), 
+            child: Icon(Icons.arrow_forward_rounded, size: 24, color: isChanged ? (isWhite ? Colors.orange.shade700 : Colors.orangeAccent) : provider.borderColor), 
           ),
           Expanded(
             flex: 4,
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isChanged ? Colors.green.withOpacity(0.2) : Colors.white10,
-                border: Border.all(color: isChanged ? Colors.greenAccent : Colors.transparent, width: 2),
+                color: isChanged ? (isWhite ? const Color(0xFFE8F5E9) : Colors.green.withOpacity(0.2)) : (isWhite ? Colors.grey.shade100 : Colors.white10),
+                border: Border.all(color: isChanged ? (isWhite ? const Color(0xFF008040) : Colors.greenAccent) : provider.borderColor, width: isChanged ? 2 : 1),
                 borderRadius: BorderRadius.circular(8)
               ),
               child: Center(
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text(newVal.toString(), style: TextStyle(fontSize: isText ? 16 : 24, fontWeight: FontWeight.bold, color: isChanged ? Colors.greenAccent : Colors.white), textAlign: TextAlign.center)
+                  child: Text(newVal.toString(), style: TextStyle(fontSize: isText ? 16 : 24, fontWeight: FontWeight.bold, color: isChanged ? (isWhite ? const Color(0xFF007A3D) : Colors.greenAccent) : provider.mainTextColor), textAlign: TextAlign.center)
                 ),
               ),
             )
@@ -326,6 +331,8 @@ class _DataEditTabState extends State<DataEditTab> {
   }
 
   void _showEditDialog(Map<String, dynamic> log) {
+    final provider = Provider.of<DataProvider>(context, listen: false);
+    final bool isWhite = provider.displayMode == DisplayMode.pureWhite;
     int id = int.parse(log['id']!);
     String workerName = log['worker_name'] ?? log['worker_id'] ?? "不明";
     
@@ -406,14 +413,14 @@ class _DataEditTabState extends State<DataEditTab> {
             String selectedDisplay = makerAbbr.isNotEmpty ? "$selectedModel ($makerAbbr)" : selectedModel;
 
             return AlertDialog(
-              backgroundColor: const Color(0xFF1A1C23),
+              backgroundColor: provider.currentCardColor,
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("実績データの修正", style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                  Text("実績データの修正", style: TextStyle(color: provider.mainTextColor, fontSize: 24, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  Text("作業者: $workerName ", style: const TextStyle(color: Color(0xFF00CCFF), fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text("作業区分: $targetWorkType", style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text("作業者: $workerName ", style: TextStyle(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text("作業区分: $targetWorkType", style: TextStyle(color: provider.subTextColor, fontSize: 16, fontWeight: FontWeight.bold)),
                 ],
               ),
               content: SingleChildScrollView(
@@ -424,26 +431,26 @@ class _DataEditTabState extends State<DataEditTab> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("作業区分", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text("作業区分", style: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.white10,
+                          color: isWhite ? Colors.grey.shade100 : Colors.white10,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white24),
+                          border: Border.all(color: provider.borderColor),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: targetWorkType,
-                            dropdownColor: const Color(0xFF1A1C23),
-                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00CCFF), size: 30),
+                            dropdownColor: provider.currentCardColor,
+                            style: TextStyle(color: provider.mainTextColor, fontSize: 20, fontWeight: FontWeight.bold),
+                            icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 30),
                             items: ["エアー清掃", "清掃", "筐体交換"].map((String value) {
                               return DropdownMenuItem<String>(
                                 value: value,
-                                child: Text(value),
+                                child: Text(value, style: TextStyle(color: provider.mainTextColor)),
                               );
                             }).toList(),
                             onChanged: (newValue) {
@@ -457,7 +464,7 @@ class _DataEditTabState extends State<DataEditTab> {
                         ),
                       ),
                       const SizedBox(height: 15),
-                      const Text("機種名", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)), 
+                      Text("機種名", style: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)), 
                       const SizedBox(height: 8),
                       
                       InkWell(
@@ -465,7 +472,7 @@ class _DataEditTabState extends State<DataEditTab> {
                           showModalBottomSheet(
                             context: context,
                             isScrollControlled: true, 
-                            backgroundColor: const Color(0xFF1A1C23),
+                            backgroundColor: provider.currentBgColor,
                             shape: const RoundedRectangleBorder(
                               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                             ),
@@ -493,15 +500,15 @@ class _DataEditTabState extends State<DataEditTab> {
                                           child: Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("機種を選択", style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)))),
+                                              Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("機種を選択", style: TextStyle(color: provider.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)))),
                                               Flexible(
                                                 child: Row(
                                                   mainAxisSize: MainAxisSize.min,
                                                   children: [
-                                                    const Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("全機種を表示", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)))),
+                                                    Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text("全機種を表示", style: TextStyle(color: provider.mainTextColor, fontSize: 16, fontWeight: FontWeight.bold)))),
                                                     Switch(
                                                       value: showAll,
-                                                      activeColor: const Color(0xFF00FFCC),
+                                                      activeColor: isWhite ? const Color(0xFF00AA66) : const Color(0xFF00FFCC),
                                                       onChanged: (val) {
                                                         setSheetState(() => showAll = val);
                                                       },
@@ -512,7 +519,7 @@ class _DataEditTabState extends State<DataEditTab> {
                                             ],
                                           ),
                                         ),
-                                        const Divider(color: Colors.white10, height: 1),
+                                        Divider(color: provider.borderColor, height: 1),
                                         Expanded(
                                           child: ListView.builder(
                                             itemCount: displayList.length,
@@ -522,7 +529,7 @@ class _DataEditTabState extends State<DataEditTab> {
                                               
                                               return ListTile(
                                                 contentPadding: const EdgeInsets.symmetric(horizontal: 25, vertical: 8), 
-                                                title: Text(dName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)), 
+                                                title: Text(dName, style: TextStyle(color: provider.mainTextColor, fontSize: 20, fontWeight: FontWeight.bold)), 
                                                 onTap: () {
                                                   setDialogState(() {
                                                     selectedModel = m['name']!;
@@ -548,15 +555,15 @@ class _DataEditTabState extends State<DataEditTab> {
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 18),
                           decoration: BoxDecoration(
-                            color: Colors.white10,
+                            color: isWhite ? Colors.grey.shade100 : Colors.white10,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white24),
+                            border: Border.all(color: provider.borderColor),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Expanded(child: Text(selectedDisplay, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                              const Icon(Icons.arrow_drop_down, color: Color(0xFF00CCFF), size: 30),
+                              Expanded(child: Text(selectedDisplay, style: TextStyle(color: provider.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                              Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 30),
                             ],
                           ),
                         ),
@@ -564,27 +571,27 @@ class _DataEditTabState extends State<DataEditTab> {
                       const SizedBox(height: 15),
 
                       if (targetWorkType == "エアー清掃") ...[
-                        const Divider(color: Colors.white10, height: 40),
-                        _buildEditField("エアー清掃台数", airCtrl),
-                        _buildEditField("清掃行き台数", toCleanCtrl),
+                        Divider(color: provider.borderColor, height: 40),
+                        _buildEditField("エアー清掃台数", airCtrl, provider, isWhite),
+                        _buildEditField("清掃行き台数", toCleanCtrl, provider, isWhite),
                       ] else if (targetWorkType == "清掃") ...[
-                        const Divider(color: Colors.white10, height: 40),
-                        _buildEditField("通常清掃台数", cleanCtrl),
-                        _buildEditField("筐体交換行き台数", toSwapCtrl),
+                        Divider(color: provider.borderColor, height: 40),
+                        _buildEditField("通常清掃台数", cleanCtrl, provider, isWhite),
+                        _buildEditField("筐体交換行き台数", toSwapCtrl, provider, isWhite),
                       ] else if (targetWorkType == "筐体交換") ...[
-                        const Divider(color: Colors.white10, height: 40),
-                        _buildEditField("交換完了台数", swapCtrl), 
+                        Divider(color: provider.borderColor, height: 40),
+                        _buildEditField("交換完了台数", swapCtrl, provider, isWhite), 
                       ],
-                      const Divider(color: Colors.white10, height: 40),
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 8.0),
-                        child: Text("作業時間", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Divider(color: provider.borderColor, height: 40),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Text("作業時間", style: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)),
                       ),
                       Row(
                         children: [
-                          Expanded(child: _buildTimeField("時間", hoursCtrl)),
+                          Expanded(child: _buildTimeField("時間", hoursCtrl, provider, isWhite)),
                           const SizedBox(width: 20),
-                          Expanded(child: _buildTimeField("分", minutesCtrl)),
+                          Expanded(child: _buildTimeField("分", minutesCtrl, provider, isWhite)),
                         ],
                       ),
                     ],
@@ -594,15 +601,15 @@ class _DataEditTabState extends State<DataEditTab> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context), 
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    child: Text("キャンセル", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)), 
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    child: Text("キャンセル", style: TextStyle(color: provider.mainTextColor, fontSize: 18, fontWeight: FontWeight.bold)), 
                   )
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00FFCC), 
-                    foregroundColor: Colors.black,
+                    backgroundColor: isWhite ? const Color(0xFF00AA66) : const Color(0xFF00FFCC), 
+                    foregroundColor: isWhite ? Colors.white : Colors.black,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15) 
                   ),
                   onPressed: () {
@@ -631,37 +638,37 @@ class _DataEditTabState extends State<DataEditTab> {
     );
   }
 
-  Widget _buildEditField(String label, TextEditingController ctrl) {
+  Widget _buildEditField(String label, TextEditingController ctrl, DataProvider provider, bool isWhite) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10.0),
       child: TextField(
         controller: ctrl,
         keyboardType: TextInputType.number,
-        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), 
+        style: TextStyle(color: provider.mainTextColor, fontSize: 24, fontWeight: FontWeight.bold), 
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold), 
-          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-          focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00CCFF), width: 2)),
+          labelStyle: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold), 
+          enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: provider.borderColor)),
+          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), width: 2)),
           contentPadding: const EdgeInsets.symmetric(vertical: 12),
         ),
       ),
     );
   }
 
-  Widget _buildTimeField(String label, TextEditingController ctrl) {
+  Widget _buildTimeField(String label, TextEditingController ctrl, DataProvider provider, bool isWhite) {
     return TextField(
       controller: ctrl,
       keyboardType: TextInputType.number,
-      style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold), 
+      style: TextStyle(color: provider.mainTextColor, fontSize: 24, fontWeight: FontWeight.bold), 
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold), 
-        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00CCFF), width: 2)),
+        labelStyle: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold), 
+        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: provider.borderColor)),
+        focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), width: 2)),
         contentPadding: const EdgeInsets.symmetric(vertical: 12),
         suffixText: label,
-        suffixStyle: const TextStyle(color: Colors.white70, fontSize: 16),
+        suffixStyle: TextStyle(color: provider.subTextColor, fontSize: 16),
       ),
     );
   }
@@ -670,15 +677,22 @@ class _DataEditTabState extends State<DataEditTab> {
   Widget build(BuildContext context) {
     String title = "データ修正メニュー";
     if (_currentMode == EditMode.today) title = "当日データ修正";
+    if (_currentMode == EditMode.previousDay) title = _selectedPrevDate != null ? "前日データ修正 (${DateFormat('MM/dd').format(_selectedPrevDate!)})" : "前日データ修正";
     if (_currentMode == EditMode.past) title = "過去データ修正";
+    final dp = context.watch<DataProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1115),
+      backgroundColor: dp.currentBgColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1C23),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24)),
+        backgroundColor: dp.currentCardColor,
+        elevation: dp.displayMode == DisplayMode.pureWhite ? 2 : 0,
+        iconTheme: IconThemeData(color: dp.mainTextColor),
+        title: Text(
+          title, 
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: dp.mainTextColor),
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, size: 28),
+          icon: Icon(Icons.arrow_back, size: 28, color: dp.mainTextColor),
           onPressed: () {
             if (_currentMode == EditMode.menu) {
               Navigator.pop(context);
@@ -700,28 +714,30 @@ class _DataEditTabState extends State<DataEditTab> {
   Widget _buildBody() {
     switch (_currentMode) {
       case EditMode.menu: return _buildMenuView();
-      case EditMode.today: return _buildLogsView(isPastMode: false);
+      case EditMode.today:
+      case EditMode.previousDay: return _buildLogsView(isPastMode: false);
       case EditMode.past: return _buildPastView(); 
     }
   }
 
   Widget _buildPastView() {
+    final dp = Provider.of<DataProvider>(context);
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-          color: const Color(0xFF1A1C23),
+          color: dp.currentCardColor,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text("対象日: ", style: TextStyle(color: Colors.white70, fontSize: 20, fontWeight: FontWeight.bold)),
+              Text("対象日: ", style: TextStyle(color: dp.subTextColor, fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(width: 15),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF00CCFF).withOpacity(0.2),
-                  foregroundColor: const Color(0xFF00CCFF),
+                  foregroundColor: dp.displayMode == DisplayMode.pureWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF),
                   padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15),
-                  side: const BorderSide(color: Color(0xFF00CCFF), width: 1.5),
+                  side: BorderSide(color: dp.displayMode == DisplayMode.pureWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), width: 1.5),
                 ),
                 icon: const Icon(Icons.calendar_month_rounded, size: 28),
                 label: Text(
@@ -736,7 +752,7 @@ class _DataEditTabState extends State<DataEditTab> {
           ),
         ),
         if (_selectedPastDate == null)
-          const Expanded(child: Center(child: Text("上部のボタンから修正したい日付を選択してください", style: TextStyle(color: Colors.white54, fontSize: 20, fontWeight: FontWeight.bold))))
+          Expanded(child: Center(child: Text("上部のボタンから修正したい日付を選択してください", style: TextStyle(color: dp.subTextColor, fontSize: 20, fontWeight: FontWeight.bold))))
         else
           Expanded(child: _buildLogsView(isPastMode: true)),
       ],
@@ -744,6 +760,8 @@ class _DataEditTabState extends State<DataEditTab> {
   }
 
   Future<void> _pickCustomDate() async {
+    final dp = Provider.of<DataProvider>(context, listen: false);
+    final bool isWhite = dp.displayMode == DisplayMode.pureWhite;
     DateTime _focusedDay = _selectedPastDate ?? DateTime.now().subtract(const Duration(days: 1));
     DateTime? _selectedDay = _selectedPastDate;
 
@@ -762,19 +780,19 @@ class _DataEditTabState extends State<DataEditTab> {
                 height: MediaQuery.of(context).size.height * 0.9,
                 padding: const EdgeInsets.all(25),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1C23),
+                  color: dp.currentCardColor,
                   borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: const Color(0xFF00FFCC), width: 2),
+                  border: Border.all(color: isWhite ? const Color(0xFF00AA66) : const Color(0xFF00FFCC), width: 2),
                 ),
                 child: Material(
                   color: Colors.transparent,
                   child: Column(
                     children: [
-                      const FittedBox(
+                      FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
                           "修正する日付を選択",
-                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: dp.mainTextColor),
                         ),
                       ),
                       const SizedBox(height: 15),
@@ -785,47 +803,51 @@ class _DataEditTabState extends State<DataEditTab> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white10,
+                              color: isWhite ? Colors.grey.shade100 : Colors.white10,
                               borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: dp.borderColor),
                             ),
                             child: DropdownButton<int>(
                               value: _focusedDay.year,
-                              dropdownColor: const Color(0xFF252830),
+                              dropdownColor: dp.currentCardColor,
                               underline: const SizedBox(),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
-                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                              items: years.map((y) {
-                                return DropdownMenuItem(value: y, child: Text("$y年"));
-                              }).toList(),
-                              onChanged: (newYear) {
-                                if (newYear != null) {
+                              icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 28),
+                              items: years.map((y) => DropdownMenuItem<int>(
+                                value: y,
+                                child: Text("$y年", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: dp.mainTextColor)),
+                              )).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
                                   setDialogState(() {
-                                    _focusedDay = DateTime(newYear, _focusedDay.month, 1);
+                                    _focusedDay = DateTime(val, _focusedDay.month, _focusedDay.day);
                                   });
                                 }
                               },
                             ),
                           ),
-                          const SizedBox(width: 20),
+                          const SizedBox(width: 15),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white10,
+                              color: isWhite ? Colors.grey.shade100 : Colors.white10,
                               borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: dp.borderColor),
                             ),
                             child: DropdownButton<int>(
                               value: _focusedDay.month,
-                              dropdownColor: const Color(0xFF252830),
+                              dropdownColor: dp.currentCardColor,
                               underline: const SizedBox(),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
-                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                              items: months.map((m) {
-                                return DropdownMenuItem(value: m, child: Text("$m月"));
-                              }).toList(),
-                              onChanged: (newMonth) {
-                                if (newMonth != null) {
+                              icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 28),
+                              items: months.map((m) => DropdownMenuItem<int>(
+                                value: m,
+                                child: Text("$m月", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: dp.mainTextColor)),
+                              )).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
                                   setDialogState(() {
-                                    _focusedDay = DateTime(_focusedDay.year, newMonth, 1);
+                                    int maxDay = DateTime(_focusedDay.year, val + 1, 0).day;
+                                    int d = _focusedDay.day > maxDay ? maxDay : _focusedDay.day;
+                                    _focusedDay = DateTime(_focusedDay.year, val, d);
                                   });
                                 }
                               },
@@ -851,12 +873,12 @@ class _DataEditTabState extends State<DataEditTab> {
                                 _focusedDay = focusedDay;
                               });
                             },
-                            calendarStyle: const CalendarStyle(
-                              selectedDecoration: BoxDecoration(color: Color(0xFF00FFCC), shape: BoxShape.circle),
-                              todayDecoration: BoxDecoration(color: Colors.white10, shape: BoxShape.circle),
-                              defaultTextStyle: TextStyle(color: Colors.white, fontSize: 22),
-                              outsideTextStyle: TextStyle(color: Colors.white24, fontSize: 22),
-                              weekendTextStyle: TextStyle(color: Colors.redAccent, fontSize: 22),
+                            calendarStyle: CalendarStyle(
+                              selectedDecoration: BoxDecoration(color: isWhite ? const Color(0xFF00AA66) : const Color(0xFF00FFCC), shape: BoxShape.circle),
+                              todayDecoration: BoxDecoration(color: isWhite ? Colors.black12 : Colors.white10, shape: BoxShape.circle),
+                              defaultTextStyle: TextStyle(color: dp.mainTextColor, fontSize: 22),
+                              outsideTextStyle: TextStyle(color: isWhite ? Colors.black26 : Colors.white24, fontSize: 22),
+                              weekendTextStyle: const TextStyle(color: Colors.redAccent, fontSize: 22),
                             ),
                             calendarBuilders: CalendarBuilders(
                               dowBuilder: (context, day) {
@@ -876,13 +898,13 @@ class _DataEditTabState extends State<DataEditTab> {
                               },
                             ),
                             daysOfWeekHeight: 50,
-                            headerStyle: const HeaderStyle(
+                            headerStyle: HeaderStyle(
                               formatButtonVisible: false,
                               titleCentered: true,
-                              titleTextStyle: TextStyle(fontSize: 0), 
-                              leftChevronIcon: Icon(Icons.chevron_left, color: Color(0xFF00FFCC), size: 40),
-                              rightChevronIcon: Icon(Icons.chevron_right, color: Color(0xFF00FFCC), size: 40),
-                              headerMargin: EdgeInsets.only(bottom: 5),
+                              titleTextStyle: const TextStyle(fontSize: 0), 
+                              leftChevronIcon: Icon(Icons.chevron_left, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 40),
+                              rightChevronIcon: Icon(Icons.chevron_right, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 40),
+                              headerMargin: const EdgeInsets.only(bottom: 5),
                             ),
                             onPageChanged: (focusedDay) {
                                setDialogState(() {
@@ -899,13 +921,13 @@ class _DataEditTabState extends State<DataEditTab> {
                         children: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text("キャンセル", style: TextStyle(color: Colors.white54, fontSize: 20)),
+                            child: Text("キャンセル", style: TextStyle(color: dp.subTextColor, fontSize: 20)),
                           ),
                           const SizedBox(width: 30),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00FFCC),
-                              foregroundColor: Colors.black,
+                              backgroundColor: isWhite ? const Color(0xFF00AA66) : const Color(0xFF00FFCC),
+                              foregroundColor: isWhite ? Colors.white : Colors.black,
                               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
@@ -936,40 +958,105 @@ class _DataEditTabState extends State<DataEditTab> {
     }
   }
 
+  // ⭐ 土日や休業日を完全スキップ！「実際に作業データが存在する一番最近の過去日」を自動判別して開く秘技！
+  Future<void> _openPreviousWorkDay() async {
+    DateTime now = DateTime.now();
+    String todayStr = DateFormat('yyyy-MM-dd').format(now);
+    DateTime prevDate = now.subtract(const Duration(days: 1)); // デフォルトの安心保険(前日)
+
+    MySQLConnection? conn;
+    try {
+      conn = await MySQLConnection.createConnection(
+        host: '192.168.10.101',
+        port: 3306,
+        userName: 'work_user',
+        password: 'work1234',
+        databaseName: 'work_manager_db',
+      );
+      await conn.connect();
+      
+      // 当日(今日)よりも前の作業ログの中で最も新しく実績が存在している日付をハイフン統一フォーマットで 1撃スナイプ！
+      var res = await conn.execute(
+        '''SELECT DATE_FORMAT(DATE(REPLACE(work_date, '/', '-')), '%Y-%m-%d') as clean_date 
+           FROM unit_cleaning_logs 
+           WHERE DATE(REPLACE(work_date, '/', '-')) < DATE(:today) 
+             AND work_date IS NOT NULL AND work_date != "" 
+           ORDER BY DATE(REPLACE(work_date, '/', '-')) DESC 
+           LIMIT 1''',
+        {"today": todayStr}
+      );
+      if (res.rows.isNotEmpty) {
+        String cleanDateStr = res.rows.first.assoc()['clean_date'] ?? '';
+        if (cleanDateStr.isNotEmpty) {
+          cleanDateStr = cleanDateStr.replaceAll('/', '-').split(' ')[0].trim();
+          try {
+            prevDate = DateTime.parse(cleanDateStr);
+            print("🌟 実務の存在確認完了！直近稼働日を発見: $cleanDateStr を前日対象に適用！");
+          } catch (e) {
+            print("日付変換例外の回避: $e");
+          }
+        }
+      }
+    } catch (e) {
+      print("前日実績日照会時の警告: $e (デフォルトの1日前を適用)");
+    } finally {
+      try { if (conn != null) await conn.close(); } catch (_) {}
+    }
+
+    if (mounted) {
+      setState(() {
+        _currentMode = EditMode.previousDay;
+        _selectedPrevDate = prevDate;
+      });
+      _fetchLogs(prevDate);
+    }
+  }
+
   Widget _buildMenuView() {
+    final dp = Provider.of<DataProvider>(context);
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.edit_note_rounded, size: 100, color: Color(0xFF00CCFF)), 
-          const SizedBox(height: 25),
-          const Text("修正モードを選択してください", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)), 
-          const SizedBox(height: 50),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(child: _menuButton("当日データ修正", Icons.today, Colors.teal, () {
-                setState(() => _currentMode = EditMode.today);
-                _fetchLogs(DateTime.now());
-              })),
-              if (widget.isAdmin) ...[
-                SizedBox(width: MediaQuery.of(context).size.width * 0.05), 
-                Flexible(child: _menuButton("過去データ修正", Icons.history, Colors.blueGrey, () {
-                  setState(() {
-                    _currentMode = EditMode.past;
-                    _selectedPastDate = null;
-                    _dayLogs = [];
-                  });
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.edit_note_rounded, size: 90, color: dp.displayMode == DisplayMode.pureWhite ? Colors.teal.shade600 : const Color(0xFF00CCFF)), 
+            const SizedBox(height: 20),
+            Text("修正モードを選択してください", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: dp.mainTextColor)), 
+            const SizedBox(height: 40),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(child: _menuButton("当日データ修正", Icons.today, Colors.teal, () {
+                  setState(() => _currentMode = EditMode.today);
+                  _fetchLogs(DateTime.now());
                 })),
-              ]
-            ],
-          )
-        ],
+                SizedBox(width: MediaQuery.of(context).size.width * 0.04), 
+                // ⭐ フロアマネージャをはじめ誰もがワンタッチで「直近の過去実績日(前日)」を修正できる黄金ボタン！！
+                Flexible(child: _menuButton("前日データ修正", Icons.event_repeat, Colors.orange.shade700, () {
+                  _openPreviousWorkDay();
+                })),
+                if (widget.isAdmin) ...[
+                  SizedBox(width: MediaQuery.of(context).size.width * 0.04), 
+                  Flexible(child: _menuButton("過去データ修正", Icons.history, Colors.blueGrey, () {
+                    setState(() {
+                      _currentMode = EditMode.past;
+                      _selectedPastDate = null;
+                      _dayLogs = [];
+                    });
+                  })),
+                ]
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _menuButton(String title, IconData icon, Color color, VoidCallback onTap) {
+    final dp = Provider.of<DataProvider>(context);
+    final isWhite = dp.displayMode == DisplayMode.pureWhite;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -978,9 +1065,10 @@ class _DataEditTabState extends State<DataEditTab> {
         width: double.infinity, 
         height: 200, 
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: isWhite ? Colors.white : color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.5), width: 2),
+          border: Border.all(color: color.withOpacity(isWhite ? 0.8 : 0.5), width: isWhite ? 2.5 : 2),
+          boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4))] : null,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -989,7 +1077,7 @@ class _DataEditTabState extends State<DataEditTab> {
             const SizedBox(height: 20),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white))
+              child: Text(title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: dp.mainTextColor))
             ), 
           ],
         ),
@@ -998,14 +1086,33 @@ class _DataEditTabState extends State<DataEditTab> {
   }
 
   Widget _buildLogsView({required bool isPastMode}) {
+    final dp = Provider.of<DataProvider>(context);
+    final isWhite = dp.displayMode == DisplayMode.pureWhite;
+
     if (_isFetching) return const Center(child: CircularProgressIndicator(color: Color(0xFF00CCFF)));
-    if (_dayLogs.isEmpty) return Center(child: Text(isPastMode ? "この日の実績データはありません" : "本日の実績データはまだありません", style: const TextStyle(color: Colors.white70, fontSize: 20, fontWeight: FontWeight.bold)));
+    if (_dayLogs.isEmpty) {
+      String msg = "本日の実績データはまだありません";
+      if (_currentMode == EditMode.previousDay) {
+        msg = "前日の実績データは見つかりませんでした\n(照会日: ${DateFormat('yyyy/MM/dd').format(_selectedPrevDate ?? DateTime.now().subtract(const Duration(days: 1)))})";
+      } else if (isPastMode) {
+        msg = "この日の実績データはありません";
+      }
+      return Center(
+        child: Text(
+          msg, 
+          textAlign: TextAlign.center,
+          style: TextStyle(color: dp.subTextColor, fontSize: 20, fontWeight: FontWeight.bold, height: 1.5),
+        ),
+      );
+    }
+
+    Color headerColor = isWhite ? const Color(0xFF006666) : Colors.cyanAccent;
 
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16), 
-          color: const Color(0xFF1A1C23),
+          color: dp.currentCardColor,
           child: Row(
             children: [
               Expanded(
@@ -1013,11 +1120,11 @@ class _DataEditTabState extends State<DataEditTab> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text("作業者", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text("作業者", style: TextStyle(color: headerColor, fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(width: 4),
                     PopupMenuButton<String>(
-                      icon: const Icon(Icons.filter_list_rounded, color: Colors.cyanAccent, size: 20),
-                      color: const Color(0xFF1A1C23),
+                      icon: Icon(Icons.filter_list_rounded, color: headerColor, size: 20),
+                      color: dp.currentCardColor,
                       tooltip: "作業者で絞り込み",
                       onSelected: (val) {
                         setState(() {
@@ -1029,7 +1136,7 @@ class _DataEditTabState extends State<DataEditTab> {
                           bool isSelected = (w == "すべて" && _selectedWorkerFilter == null) || w == _selectedWorkerFilter;
                           return PopupMenuItem<String>(
                             value: w,
-                            child: Text(w, style: TextStyle(color: isSelected ? Colors.cyanAccent : Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                            child: Text(w, style: TextStyle(color: isSelected ? headerColor : dp.mainTextColor, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
                           );
                         }).toList();
                       },
@@ -1037,12 +1144,12 @@ class _DataEditTabState extends State<DataEditTab> {
                   ],
                 ),
               ),
-              const Expanded(flex: 3, child: Text("機種名", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
-              const Expanded(flex: 2, child: Text("作業区分", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
-              const Expanded(flex: 2, child: Text("内容１", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
-              const Expanded(flex: 2, child: Text("内容２", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
-              const Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("作業時間", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
-              const Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("編集", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+              Expanded(flex: 3, child: Text("機種名", style: TextStyle(color: headerColor, fontSize: 18, fontWeight: FontWeight.bold))),
+              Expanded(flex: 2, child: Text("作業区分", style: TextStyle(color: headerColor, fontSize: 18, fontWeight: FontWeight.bold))),
+              Expanded(flex: 2, child: Text("内容１", style: TextStyle(color: headerColor, fontSize: 18, fontWeight: FontWeight.bold))),
+              Expanded(flex: 2, child: Text("内容２", style: TextStyle(color: headerColor, fontSize: 18, fontWeight: FontWeight.bold))),
+              Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("作業時間", style: TextStyle(color: headerColor, fontSize: 18, fontWeight: FontWeight.bold)))),
+              Expanded(flex: 1, child: Align(alignment: Alignment.center, child: Text("編集", style: TextStyle(color: headerColor, fontSize: 18, fontWeight: FontWeight.bold)))),
             ],
           ),
         ),
@@ -1074,28 +1181,31 @@ class _DataEditTabState extends State<DataEditTab> {
               int mainQty = 0;
               String subLabel = "";
               int subQty = 0;
-              Color accentColor = const Color(0xFF00CCFF);
+              Color accentColor = isWhite ? const Color(0xFF006688) : const Color(0xFF00CCFF);
 
               if (airQty > 0) {
                 mainLabel = "エアー清掃"; mainQty = airQty;
                 subLabel = "清掃行き"; subQty = toCleanQty;
-                accentColor = const Color(0xFF00CCFF);
+                accentColor = isWhite ? const Color(0xFF006688) : const Color(0xFF00CCFF);
               } else if (cleanQty > 0) {
                 mainLabel = "通常清掃"; mainQty = cleanQty;
                 subLabel = "交換行き"; subQty = toSwapQty;
-                accentColor = const Color(0xFF00FFCC);
+                accentColor = isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC);
               } else {
                 mainLabel = "筐体交換"; mainQty = int.tryParse(log['swap_qty'] ?? '0') ?? 0;
                 subLabel = "その他"; subQty = 0;
-                accentColor = Colors.amber;
+                accentColor = isWhite ? Colors.orange.shade800 : Colors.amber;
               }
 
               bool isEven = index % 2 == 0;
+              Color rowBg = isWhite 
+                  ? (isEven ? Colors.white : const Color(0xFFF2F6F9))
+                  : (isEven ? const Color(0xFF0F1115) : const Color(0xFF14161C));
 
               return Container(
                 decoration: BoxDecoration(
-                  color: isEven ? const Color(0xFF0F1115) : const Color(0xFF14161C),
-                  border: const Border(bottom: BorderSide(color: Colors.white10)),
+                  color: rowBg,
+                  border: Border(bottom: BorderSide(color: dp.borderColor)),
                 ),
                 child: InkWell(
                   onTap: () => _showEditDialog(log),
@@ -1105,11 +1215,11 @@ class _DataEditTabState extends State<DataEditTab> {
                       children: [
                         Expanded(
                           flex: 2, 
-                          child: Text(workerName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis), 
+                          child: Text(workerName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: dp.mainTextColor), overflow: TextOverflow.ellipsis), 
                         ),
                         Expanded(
                           flex: 3,
-                          child: Text(displayModelName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white), overflow: TextOverflow.ellipsis), 
+                          child: Text(displayModelName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: dp.mainTextColor), overflow: TextOverflow.ellipsis), 
                         ),
                         Expanded(
                           flex: 2,
@@ -1130,7 +1240,7 @@ class _DataEditTabState extends State<DataEditTab> {
                                 ? _compactInfoChip(
                                     subLabel, 
                                     subQty, 
-                                    (subLabel == "清掃行き") ? Colors.cyanAccent : Colors.orangeAccent,
+                                    (subLabel == "清掃行き") ? (isWhite ? Colors.teal.shade700 : Colors.cyanAccent) : (isWhite ? Colors.deepOrange : Colors.orangeAccent),
                                   ) 
                                 : const SizedBox(),
                           ),
@@ -1139,14 +1249,14 @@ class _DataEditTabState extends State<DataEditTab> {
                           flex: 1,
                           child: Align(
                             alignment: Alignment.center,
-                            child: Text(timeDisplay, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white))
+                            child: Text(timeDisplay, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dp.mainTextColor))
                           ), 
                         ),
-                        const Expanded(
+                        Expanded(
                           flex: 1,
                           child: Align(
                             alignment: Alignment.center,
-                            child: Icon(Icons.edit, color: Colors.white70, size: 28)
+                            child: Icon(Icons.edit, color: dp.subTextColor, size: 28)
                           ), 
                         ),
                       ],
@@ -1162,20 +1272,21 @@ class _DataEditTabState extends State<DataEditTab> {
   }
 
   Widget _compactInfoChip(String label, dynamic countOrText, Color color, {bool isText = false}) {
+    final dp = Provider.of<DataProvider>(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), 
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        border: Border.all(color: color.withOpacity(0.5)),
+        color: color.withOpacity(0.12),
+        border: Border.all(color: color.withOpacity(0.6)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)))), 
+          Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: Text(label, style: TextStyle(color: dp.mainTextColor, fontSize: 14, fontWeight: FontWeight.bold)))), 
           const SizedBox(width: 8),
           FittedBox(fit: BoxFit.scaleDown, child: Text(countOrText.toString(), style: TextStyle(color: color, fontSize: isText ? 16 : 20, fontWeight: FontWeight.bold))), 
-        ],
+        ]
       ),
     );
   }
@@ -1191,29 +1302,35 @@ class _ConnectionStatusIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
     final bool isOnline = data.isOnline;
+    final bool isWhite = data.displayMode == DisplayMode.pureWhite;
+
+    final Color activeColor = isOnline 
+        ? (isWhite ? const Color(0xFF008844) : Colors.greenAccent)
+        : (isWhite ? const Color(0xFFCC0033) : Colors.redAccent);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: BoxDecoration(
-        color: isOnline ? Colors.greenAccent.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+        color: isWhite ? activeColor.withOpacity(0.12) : activeColor.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isOnline ? Colors.greenAccent : Colors.redAccent, width: 1.5),
+        border: Border.all(color: activeColor.withOpacity(isWhite ? 0.8 : 0.6), width: isWhite ? 2.0 : 1.5),
+        boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))] : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             isOnline ? Icons.wifi : Icons.wifi_off,
-            color: isOnline ? Colors.greenAccent : Colors.redAccent,
-            size: 16,
+            color: activeColor,
+            size: 18,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           Text(
             isOnline ? "Online" : "Offline",
             style: TextStyle(
-              color: isOnline ? Colors.greenAccent : Colors.redAccent,
+              color: activeColor,
               fontWeight: FontWeight.bold,
-              fontSize: 14,
+              fontSize: 15,
               letterSpacing: 1.0,
             ),
           ),

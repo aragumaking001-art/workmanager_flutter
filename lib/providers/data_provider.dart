@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -157,6 +158,21 @@ class WorkerRank {
   WorkerRank(this.id);
 }
 
+// ⭐ 画面の視認性と光反射を完全コントロールする表示トーン定義
+enum DisplayMode {
+  pureWhite,  // 🤍 極限反射防止：クリア・ライトパーリーホワイト（蛍光灯の映り込みを完全消滅！）
+  middleGray, // ☀ 反射低減：マットミドルグレー
+  pureDark,   // 🌙 従来のオリジナルダーク（純黒）
+}
+
+// ⭐ 背景に白を選んでも見えにくくならない文字色の最適・強制調整定義
+enum TextTone {
+  auto,       // 🤖 自動調整（背景白→ディープブラック文字 / 背景ダーク→純白文字）
+  deepBlack,  // ⚫ 漆黒ジェットブラック（白背景で最高のくっきり感！）
+  navySlate,  // 🔵 シックなダークオックスフォードネイビー
+  crispWhite, // ⚪ 従来のピュアブライトホワイト
+}
+
 class DataProvider extends ChangeNotifier {
   Map<String, ModelSummary> _modelDataMap = {};
   List<WorkerRank> _workerRanks = [];
@@ -175,6 +191,70 @@ class DataProvider extends ChangeNotifier {
 
   // 💡 【修正】アプリ起動時は「Offline（通信前）」状態からスタートさせる
   bool isOnline = false;
+
+  // ⭐ タブレットのライト・蛍光灯の猛烈な反射（映り込み）を根絶する至高の白背景＆カラー可変・手動切替設計！
+  DisplayMode displayMode = DisplayMode.pureWhite; // 今ご実感いただけるよう、即座に「完全反射消しホワイトモード」を標準起動設定！
+  TextTone customTextTone = TextTone.auto;
+
+  void setDisplayMode(DisplayMode mode) {
+    displayMode = mode;
+    notifyListeners();
+  }
+
+  void setTextTone(TextTone tone) {
+    customTextTone = tone;
+    notifyListeners();
+  }
+
+  bool get isAntiGlareMode => displayMode != DisplayMode.pureDark;
+
+  void toggleAntiGlareMode() {
+    if (displayMode == DisplayMode.pureWhite) {
+      displayMode = DisplayMode.pureDark;
+    } else {
+      displayMode = DisplayMode.pureWhite;
+    }
+    notifyListeners();
+  }
+
+  Color get currentBgColor {
+    switch (displayMode) {
+      case DisplayMode.pureWhite:
+        return const Color(0xFFEFF2F7); // 液晶ガラスの反射干渉をゼロに退行させ、屋外や強ライト下で無敵を誇るソフトクリアホワイト！
+      case DisplayMode.middleGray:
+      case DisplayMode.pureDark:
+        return const Color(0xFF0F1115);
+    }
+  }
+
+  Color get currentCardColor {
+    switch (displayMode) {
+      case DisplayMode.pureWhite:
+        return Colors.white; // 光が跳ね返らない紙の上質さとクリーン感のカードパネル！
+      case DisplayMode.middleGray:
+      case DisplayMode.pureDark:
+        return const Color(0xFF1A1C23);
+    }
+  }
+
+  // ⭐ 背景（白モード/黒モード）に応じて、迷うことなく最高峰にくっきり読みやすい文字カラーへ自動統一！
+  Color get mainTextColor {
+    return displayMode == DisplayMode.pureWhite 
+        ? const Color(0xFF0F172A) // 白モード：圧倒的に読みやすくコントラストが高いジェットブラック！
+        : Colors.white;           // 黒モード：くっきり光るピュアホワイト！
+  }
+
+  Color get subTextColor {
+    return displayMode == DisplayMode.pureWhite 
+        ? const Color(0xFF334155) // 白モード：蛍光灯下でもしっかり読める濃いめのディープスレート！
+        : Colors.white70;         // 黒モード：上品で目立ちすぎないブライトグレー！
+  }
+
+  Color get borderColor {
+    return displayMode == DisplayMode.pureWhite 
+        ? const Color(0xFF94A3B8) // 白モード：境界をしっかり切り分けるミディアムスチール！
+        : Colors.white24;
+  }
 
   DateTime? _rankStartDate = DateTime.now().subtract(
     Duration(days: DateTime.now().weekday - 1),
@@ -656,12 +736,15 @@ class DataProvider extends ChangeNotifier {
           int ts = double.tryParse(data['to_swap_qty'] ?? '0')?.toInt() ?? 0;
           double wm = double.tryParse(data['work_minutes'] ?? '0') ?? 0;
 
-          double stdAir = double.tryParse(data['std_air'] ?? '10.0') ?? 10.0;
-          double stdClean =
-              double.tryParse(data['std_clean'] ?? '10.0') ?? 10.0;
-          double stdSwap = double.tryParse(data['std_swap'] ?? '10.0') ?? 10.0;
+          double stdAir = double.tryParse(data['std_air']?.toString() ?? '10.0') ?? 10.0;
+          double stdClean = double.tryParse(data['std_clean']?.toString() ?? '10.0') ?? 10.0;
+          double stdSwap = double.tryParse(data['std_swap']?.toString() ?? '10.0') ?? 10.0;
 
-          String luckyFlag = data['lucky_flag'] ?? "";
+          if (stdAir <= 0 || stdAir.isNaN || stdAir.isInfinite) stdAir = 10.0;
+          if (stdClean <= 0 || stdClean.isNaN || stdClean.isInfinite) stdClean = 10.0;
+          if (stdSwap <= 0 || stdSwap.isNaN || stdSwap.isInfinite) stdSwap = 10.0;
+
+          String luckyFlag = data['lucky_flag']?.toString() ?? "";
           double bonus = luckyFlag.contains("Lucky") ? 1.2 : 1.0;
 
           ws.air += a;
@@ -726,41 +809,87 @@ class DataProvider extends ChangeNotifier {
       );
       await conn.connect();
 
+      // ⭐ プラットフォーム別の最適保存フォルダー自動選択！
+      // (タブレット(Android)なら本体の「ダウンロード」フォルダ、Windowsなら「デスクトップ」等に確実に自動保存)
+      String dirPath = '';
+      if (Platform.isAndroid) {
+        dirPath = '/storage/emulated/0/Download';
+      } else if (Platform.isWindows) {
+        String userProfile = Platform.environment['USERPROFILE'] ?? 'C:/Users/yamada';
+        dirPath = '$userProfile/Desktop';
+      } else {
+        dirPath = 'C:/Users/yamada/Desktop';
+      }
+
       String timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       String fileName = 'work_logs_$timestamp.csv';
-      String outPath = 'C:/Users/yamada/Desktop/$fileName';
+      String outPath = '$dirPath/$fileName';
 
-      // カラム名を動的に取得してヘッダー行を作成
-      var res = await conn.execute('SELECT * FROM unit_cleaning_logs LIMIT 1');
-      String headerRow = "*";
-      String dataRow = "*";
-      if (res.rows.isNotEmpty) {
-        List<String> columns = res.rows.first.assoc().keys.toList();
-        headerRow = columns.map((c) => "'$c'").join(", ");
-        dataRow = columns.map((c) => "IFNULL($c, '')").join(", ");
-      } else {
-        // データがない場合
+      // ⭐ メンバー情報の辞書を回収 ( worker_id ➔ worker_name への神変換用！ )
+      Map<String, String> memberMap = {};
+      try {
+        var memRes = await conn.execute('SELECT worker_id, worker_name FROM m_members');
+        for (var row in memRes.rows) {
+          var assoc = row.assoc();
+          String wid = assoc['worker_id'] ?? '';
+          String wname = assoc['worker_name'] ?? '';
+          if (wid.isNotEmpty && wname.isNotEmpty) {
+            memberMap[wid] = wname;
+          }
+        }
+      } catch (e) {
+        print("m_members 取り出し警告 (無視): $e");
+      }
+
+      // データベースからすべての実績を回収
+      var res = await conn.execute('SELECT * FROM unit_cleaning_logs ORDER BY id ASC');
+      await conn.close();
+
+      if (res.rows.isEmpty) {
         return null;
       }
 
-      String sql =
-          '''
-        SELECT $headerRow
-        UNION ALL
-        SELECT $dataRow
-        INTO OUTFILE '$outPath'
-        CHARACTER SET cp932
-        FIELDS TERMINATED BY ',' 
-        ENCLOSED BY '"'
-        LINES TERMINATED BY '\\n'
-        FROM unit_cleaning_logs
-      ''';
+      // 確実なCSVセルエスケープ
+      String escapeCsv(String? val) {
+        if (val == null) return '';
+        String str = val.replaceAll('"', '""');
+        return '"$str"';
+      }
 
-      await conn.execute(sql);
-      await conn.close();
+      List<String> columns = res.rows.first.assoc().keys.toList();
+      StringBuffer csvBuffer = StringBuffer();
+      
+      // 1. カラム名(ヘッダー)を印字 (💡 'worker_id' を自動で 'worker_name' に書き換え！)
+      csvBuffer.writeln(columns.map((c) => escapeCsv(c == 'worker_id' ? 'worker_name' : c)).join(','));
+
+      // 2. 実績データをきれいなCSVフォーマットへ変換
+      for (var row in res.rows) {
+        var assoc = row.assoc();
+        String line = columns.map((col) {
+          String val = assoc[col]?.toString() ?? '';
+          // 💡 worker_id の列なら、名簿と付け合わせて「実際のお名前(worker_name)」へチェンジ！
+          if (col == 'worker_id' && memberMap.containsKey(val)) {
+            val = memberMap[val]!;
+          }
+          return escapeCsv(val);
+        }).join(',');
+        csvBuffer.writeln(line);
+      }
+
+      // ⭐ どのExcel/ソフトで開いても絶対に文字化けさせない秘技: 【 BOM (0xEF, 0xBB, 0xBF) 】付き UTF-8 形式！
+      List<int> bom = [0xEF, 0xBB, 0xBF];
+      List<int> utf8Bytes = utf8.encode(csvBuffer.toString());
+
+      File file = File(outPath);
+      if (!(await file.parent.exists())) {
+        await file.parent.create(recursive: true);
+      }
+      await file.writeAsBytes([...bom, ...utf8Bytes], flush: true);
+
+      print("✅ タブレット/PCローカル保存完遂(お名前変換済み): $outPath");
       return outPath;
     } catch (e) {
-      print("CSV出力エラー: $e");
+      print("🚨 CSV出力エラー詳細: $e");
       return null;
     }
   }

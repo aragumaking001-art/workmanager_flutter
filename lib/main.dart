@@ -16,6 +16,7 @@ import 'tabs/data_edit_tab.dart';
 import 'tabs/data_view_tab.dart';
 import 'tabs/personal_stats_tab.dart';
 import 'tabs/goal_list_tab.dart';
+import 'tabs/settings_tab.dart';
 
 // 💡 動作モードの定義
 enum AppMode { administrator, kiosk, manager }
@@ -131,34 +132,47 @@ class ConnectionStatusIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final data = context.watch<DataProvider>();
     final bool isOnline = data.isOnline;
+    final bool isWhite = data.displayMode == DisplayMode.pureWhite;
+
+    // 💡 白モードではディープで美しい視認性を発揮するグリーン/レッドを使用！
+    final Color activeColor = isOnline 
+        ? (isWhite ? const Color(0xFF008844) : Colors.greenAccent)
+        : (isWhite ? const Color(0xFFCC0033) : Colors.redAccent);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: BoxDecoration(
-        color: isOnline
-            ? Colors.greenAccent.withOpacity(0.1)
-            : Colors.redAccent.withOpacity(0.1),
+        color: isWhite 
+            ? activeColor.withOpacity(0.12) 
+            : activeColor.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isOnline ? Colors.greenAccent : Colors.redAccent,
-          width: 1.5,
+          color: activeColor.withOpacity(isWhite ? 0.8 : 0.6),
+          width: isWhite ? 2.0 : 1.5,
         ),
+        boxShadow: isWhite ? [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          )
+        ] : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             isOnline ? Icons.wifi : Icons.wifi_off,
-            color: isOnline ? Colors.greenAccent : Colors.redAccent,
-            size: 16,
+            color: activeColor,
+            size: 18,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           Text(
             isOnline ? "Online" : "Offline",
             style: TextStyle(
-              color: isOnline ? Colors.greenAccent : Colors.redAccent,
+              color: activeColor,
               fontWeight: FontWeight.bold,
-              fontSize: 14,
+              fontSize: 15,
               letterSpacing: 1.0,
             ),
           ),
@@ -219,8 +233,9 @@ class _KioskWaitScreenState extends State<KioskWaitScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final dp = context.watch<DataProvider>();
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1115),
+      backgroundColor: dp.currentBgColor,
       body: Stack(
         children: [
           Opacity(
@@ -249,7 +264,7 @@ class _KioskWaitScreenState extends State<KioskWaitScreen> {
                     ),
                   ),
                   const SizedBox(height: 30),
-                  const Flexible(
+                  Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
@@ -257,18 +272,18 @@ class _KioskWaitScreenState extends State<KioskWaitScreen> {
                         style: TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: dp.mainTextColor,
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 20),
-                  const Flexible(
+                  Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
                         "個人実績ステータスを確認できます",
-                        style: TextStyle(fontSize: 20, color: Colors.white54),
+                        style: TextStyle(fontSize: 20, color: dp.subTextColor),
                       ),
                     ),
                   ),
@@ -373,7 +388,7 @@ class _MainLayoutState extends State<MainLayout> {
     // 2ページ目の構成
     List<Widget> page2TopCards = [
       _menuCard(context, "作業標準台数", Icons.flag_circle, Colors.pinkAccent, const GoalListTab()),
-      _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
+      _menuCard(context, "画面・表示設定", Icons.settings_display_rounded, const Color(0xFF00CCFF), const SettingsTab()), // ⭐ 反射低減と純黒トーンを心ゆくまで自由に選択できる専用設定カード！
       _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
       _menuCard(context, "追加機能", Icons.add_circle_outline, Colors.grey, null),
     ];
@@ -395,21 +410,25 @@ class _MainLayoutState extends State<MainLayout> {
       }
     }
 
+    final dp = context.watch<DataProvider>();
+
     return Scaffold(
+      backgroundColor: dp.currentBgColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1C23),
+        backgroundColor: dp.currentCardColor,
+        elevation: dp.displayMode == DisplayMode.pureWhite ? 2 : 0,
         title: Text(
           widget.appMode == AppMode.administrator
               ? "和気センター 統合ダッシュボード [管理者]"
               : "和気センター 統合ダッシュボード [フロアマネージャ]",
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, color: dp.mainTextColor),
         ),
         centerTitle: true,
         actions: [
           if (widget.appMode == AppMode.administrator)
             Builder(
             builder: (ctx) => IconButton(
-              icon: const Icon(Icons.download, color: Color(0xFF00CCFF), size: 30),
+              icon: Icon(Icons.download, color: dp.displayMode == DisplayMode.pureWhite ? const Color(0xFF006688) : const Color(0xFF00CCFF), size: 30),
               tooltip: "データベースPCにCSVを出力",
               onPressed: () async {
                 ScaffoldMessenger.of(ctx).showSnackBar(
@@ -437,7 +456,7 @@ class _MainLayoutState extends State<MainLayout> {
             ),
           ),
           const SizedBox(width: 15),
-          const Center(child: ConnectionStatusIndicator()), // 💡 メイン画面の右上に追加
+          const Center(child: ConnectionStatusIndicator()), // 💡 メイン画面の右上
           const SizedBox(width: 20),
         ],
       ),
@@ -555,6 +574,8 @@ class _MainLayoutState extends State<MainLayout> {
     Widget? targetPage,
   ) {
     bool isAvailable = targetPage != null;
+    final dp = Provider.of<DataProvider>(context);
+    final isWhiteMode = dp.displayMode == DisplayMode.pureWhite;
 
     return Expanded(
       child: InkWell(
@@ -571,7 +592,8 @@ class _MainLayoutState extends State<MainLayout> {
           height: 200,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
+            color: isWhiteMode ? (isAvailable ? Colors.white : Colors.grey.shade200) : null,
+            gradient: isWhiteMode ? null : LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
@@ -581,9 +603,18 @@ class _MainLayoutState extends State<MainLayout> {
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: color.withOpacity(isAvailable ? 0.8 : 0.1),
-              width: 2,
+              color: isWhiteMode 
+                  ? (isAvailable ? color : Colors.grey.shade300)
+                  : color.withOpacity(isAvailable ? 0.8 : 0.1),
+              width: isWhiteMode ? 2.5 : 2,
             ),
+            boxShadow: isWhiteMode && isAvailable ? [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ] : null,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -594,7 +625,7 @@ class _MainLayoutState extends State<MainLayout> {
                   child: Icon(
                     icon,
                     size: 60,
-                    color: isAvailable ? color : Colors.white10,
+                    color: isAvailable ? color : (isWhiteMode ? Colors.grey.shade400 : Colors.white10),
                   ),
                 ),
               ),
@@ -608,18 +639,18 @@ class _MainLayoutState extends State<MainLayout> {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: isAvailable ? Colors.white : Colors.white10,
+                      color: isAvailable ? dp.mainTextColor : (isWhiteMode ? Colors.grey.shade500 : Colors.white10),
                     ),
                   ),
                 ),
               ),
               if (!isAvailable)
-                const Flexible(
+                Flexible(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
                       "(準備中)",
-                      style: TextStyle(color: Colors.white10, fontSize: 14),
+                      style: TextStyle(color: isWhiteMode ? Colors.grey.shade400 : Colors.white10, fontSize: 14),
                     ),
                   ),
                 ),
@@ -650,12 +681,17 @@ class _TabPageLayoutState extends State<TabPageLayout> {
 
   @override
   Widget build(BuildContext context) {
+    final dp = context.watch<DataProvider>();
+    final isWhite = dp.displayMode == DisplayMode.pureWhite;
+
     return Scaffold(
+      backgroundColor: dp.currentBgColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1C23),
-        title: const Text(
+        backgroundColor: dp.currentCardColor,
+        elevation: isWhite ? 2 : 0,
+        title: Text(
           "4F 作業実績詳細",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, color: dp.mainTextColor),
         ),
         actions: const [
           // 💡 更新・閉じるボタンを削除し、インジケーターだけを配置
@@ -667,10 +703,10 @@ class _TabPageLayoutState extends State<TabPageLayout> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
-        backgroundColor: const Color(0xFF1A1C23),
+        backgroundColor: dp.currentCardColor,
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF00CCFF),
-        unselectedItemColor: Colors.white30,
+        selectedItemColor: isWhite ? const Color(0xFF006688) : const Color(0xFF00CCFF),
+        unselectedItemColor: isWhite ? Colors.black38 : Colors.white30,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.emoji_events_rounded),

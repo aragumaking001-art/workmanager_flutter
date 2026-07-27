@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mysql_client/mysql_client.dart';
+import 'package:provider/provider.dart';
+import '../providers/data_provider.dart';
 
 class GoalListTab extends StatefulWidget {
   const GoalListTab({super.key});
@@ -60,19 +62,24 @@ class _GoalListTabState extends State<GoalListTab> {
 
   @override
   Widget build(BuildContext context) {
+    final dp = context.watch<DataProvider>();
+    final isWhite = dp.displayMode == DisplayMode.pureWhite;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F1115),
+      backgroundColor: dp.currentBgColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1C23),
-        title: const Text("作業標準台数", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: dp.currentCardColor,
+        elevation: isWhite ? 2 : 0,
+        iconTheme: IconThemeData(color: dp.mainTextColor),
+        title: Text("作業標準台数", style: TextStyle(fontWeight: FontWeight.bold, color: dp.mainTextColor)),
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Icon(Icons.arrow_back, color: dp.mainTextColor),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.cyanAccent),
+            icon: Icon(Icons.refresh, color: isWhite ? const Color(0xFF006688) : Colors.cyanAccent),
             tooltip: "更新",
             onPressed: _fetchStandards,
           ),
@@ -82,10 +89,10 @@ class _GoalListTabState extends State<GoalListTab> {
       body: _isFetching
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF00CCFF)))
           : _standards.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     "マスターデータがありません",
-                    style: TextStyle(color: Colors.white70, fontSize: 18),
+                    style: TextStyle(color: dp.subTextColor, fontSize: 18),
                   ),
                 )
               : Column(
@@ -93,16 +100,16 @@ class _GoalListTabState extends State<GoalListTab> {
                     // --- ヘッダー行 ---
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF1A1C23),
-                        border: Border(bottom: BorderSide(color: Color(0xFF00CCFF), width: 2)),
+                      decoration: BoxDecoration(
+                        color: dp.currentCardColor,
+                        border: Border(bottom: BorderSide(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), width: 2)),
                       ),
                       child: Row(
-                        children: const [
-                          Expanded(flex: 3, child: Text("機種名", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
-                          Expanded(flex: 2, child: Align(alignment: Alignment.center, child: Text("エアー清掃", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
-                          Expanded(flex: 2, child: Align(alignment: Alignment.center, child: Text("清掃", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
-                          Expanded(flex: 2, child: Align(alignment: Alignment.center, child: Text("筐体交換", style: TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+                        children: [
+                          Expanded(flex: 3, child: Text("機種名", style: TextStyle(color: isWhite ? const Color(0xFF007799) : Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold))),
+                          Expanded(flex: 2, child: Align(alignment: Alignment.center, child: Text("エアー清掃", style: TextStyle(color: isWhite ? const Color(0xFF007799) : Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+                          Expanded(flex: 2, child: Align(alignment: Alignment.center, child: Text("清掃", style: TextStyle(color: isWhite ? const Color(0xFF007799) : Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
+                          Expanded(flex: 2, child: Align(alignment: Alignment.center, child: Text("筐体交換", style: TextStyle(color: isWhite ? const Color(0xFF007799) : Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold)))),
                         ],
                       ),
                     ),
@@ -127,35 +134,37 @@ class _GoalListTabState extends State<GoalListTab> {
 
                           return Container(
                             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-                            color: isEven ? const Color(0xFF16181D) : const Color(0xFF0F1115),
+                            color: isWhite 
+                                ? (isEven ? Colors.white : Colors.grey.shade100)
+                                : (isEven ? const Color(0xFF16181D) : const Color(0xFF0F1115)),
                             child: Row(
                               children: [
                                 Expanded(
                                   flex: 3, 
                                   child: Text(
                                     cleanModelName, 
-                                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)
+                                    style: TextStyle(color: dp.mainTextColor, fontSize: 20, fontWeight: FontWeight.bold)
                                   )
                                 ),
                                 Expanded(
                                   flex: 2, 
                                   child: Align(
                                     alignment: Alignment.center, 
-                                    child: _GoalChip(text: stdAir, color: Colors.blueAccent)
+                                    child: _GoalChip(text: stdAir, color: isWhite ? Colors.blue.shade700 : Colors.blueAccent, isWhite: isWhite)
                                   )
                                 ),
                                 Expanded(
                                   flex: 2, 
                                   child: Align(
                                     alignment: Alignment.center, 
-                                    child: _GoalChip(text: stdClean, color: Colors.green)
+                                    child: _GoalChip(text: stdClean, color: isWhite ? const Color(0xFF008040) : Colors.greenAccent, isWhite: isWhite)
                                   )
                                 ),
                                 Expanded(
                                   flex: 2, 
                                   child: Align(
                                     alignment: Alignment.center, 
-                                    child: _GoalChip(text: stdSwap, color: Colors.orangeAccent)
+                                    child: _GoalChip(text: stdSwap, color: isWhite ? Colors.orange.shade800 : Colors.orangeAccent, isWhite: isWhite)
                                   )
                                 ),
                               ],
@@ -174,21 +183,22 @@ class _GoalListTabState extends State<GoalListTab> {
 class _GoalChip extends StatelessWidget {
   final String text;
   final Color color;
+  final bool isWhite;
 
-  const _GoalChip({required this.text, required this.color});
+  const _GoalChip({required this.text, required this.color, required this.isWhite});
 
   @override
   Widget build(BuildContext context) {
     if (text == "-") {
-      return const Text("-", style: TextStyle(color: Colors.white38, fontSize: 16));
+      return Text("-", style: TextStyle(color: isWhite ? Colors.black26 : Colors.white38, fontSize: 16));
     }
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withOpacity(isWhite ? 0.1 : 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: color.withOpacity(isWhite ? 0.4 : 0.5)),
       ),
       child: Text(
         text,

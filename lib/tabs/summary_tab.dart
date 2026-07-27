@@ -25,6 +25,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
     DateTime _focusedDay = provider.summaryStartDate; 
     DateTime? _start = provider.summaryStartDate;
     DateTime? _end = provider.summaryEndDate;
+    final isWhite = provider.displayMode == DisplayMode.pureWhite;
 
     List<int> years = List.generate(11, (index) => 2020 + index);
     List<int> months = List.generate(12, (index) => index + 1);
@@ -40,17 +41,17 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                 height: 700,
                 padding: const EdgeInsets.all(25),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1C23),
+                  color: provider.currentCardColor,
                   borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: const Color(0xFF00FFCC), width: 2),
+                  border: Border.all(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), width: 2),
                 ),
                 child: Material(
                   color: Colors.transparent,
                   child: Column(
                     children: [
-                      const Text(
+                      Text(
                         "集計期間の選択",
-                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: provider.mainTextColor),
                       ),
                       const SizedBox(height: 15),
 
@@ -60,17 +61,17 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white10,
+                              color: isWhite ? Colors.grey.shade200 : Colors.white10,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: DropdownButton<int>(
                               value: _focusedDay.year,
-                              dropdownColor: const Color(0xFF252830),
+                              dropdownColor: isWhite ? Colors.white : const Color(0xFF252830),
                               underline: const SizedBox(),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
-                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                              icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC)),
+                              style: TextStyle(color: provider.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold),
                               items: years.map((y) {
-                                return DropdownMenuItem(value: y, child: Text("$y年"));
+                                return DropdownMenuItem(value: y, child: Text("$y年", style: TextStyle(color: provider.mainTextColor)));
                               }).toList(),
                               onChanged: (newYear) {
                                 if (newYear != null) {
@@ -85,17 +86,17 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white10,
+                              color: isWhite ? Colors.grey.shade200 : Colors.white10,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: DropdownButton<int>(
                               value: _focusedDay.month,
-                              dropdownColor: const Color(0xFF252830),
+                              dropdownColor: isWhite ? Colors.white : const Color(0xFF252830),
                               underline: const SizedBox(),
-                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00FFCC)),
-                              style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                              icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC)),
+                              style: TextStyle(color: provider.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold),
                               items: months.map((m) {
-                                return DropdownMenuItem(value: m, child: Text("$m月"));
+                                return DropdownMenuItem(value: m, child: Text("$m月", style: TextStyle(color: provider.mainTextColor)));
                               }).toList(),
                               onChanged: (newMonth) {
                                 if (newMonth != null) {
@@ -125,14 +126,14 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                             _focusedDay = focusedDay;
                           });
                         },
-                        calendarStyle: const CalendarStyle(
-                          rangeStartDecoration: BoxDecoration(color: Color(0xFF00FFCC), shape: BoxShape.circle),
-                          rangeEndDecoration: BoxDecoration(color: Color(0xFF00FFCC), shape: BoxShape.circle),
-                          rangeHighlightColor: Color(0x3300CCFF),
-                          todayDecoration: BoxDecoration(color: Colors.white10, shape: BoxShape.circle),
-                          defaultTextStyle: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold), 
-                          outsideTextStyle: TextStyle(color: Colors.white38, fontSize: 22, fontWeight: FontWeight.bold), 
-                          weekendTextStyle: TextStyle(color: Colors.redAccent, fontSize: 22, fontWeight: FontWeight.bold), 
+                        calendarStyle: CalendarStyle(
+                          rangeStartDecoration: BoxDecoration(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), shape: BoxShape.circle),
+                          rangeEndDecoration: BoxDecoration(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), shape: BoxShape.circle),
+                          rangeHighlightColor: isWhite ? const Color(0xFF007799).withOpacity(0.15) : const Color(0x3300CCFF),
+                          todayDecoration: BoxDecoration(color: isWhite ? Colors.grey.shade300 : Colors.white10, shape: BoxShape.circle),
+                          defaultTextStyle: TextStyle(color: provider.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold), 
+                          outsideTextStyle: TextStyle(color: provider.subTextColor, fontSize: 22, fontWeight: FontWeight.bold), 
+                          weekendTextStyle: const TextStyle(color: Colors.redAccent, fontSize: 22, fontWeight: FontWeight.bold), 
                         ),
                         calendarBuilders: CalendarBuilders(
                           dowBuilder: (context, day) {
@@ -152,13 +153,13 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                           },
                         ),
                         daysOfWeekHeight: 50,
-                        headerStyle: const HeaderStyle(
+                        headerStyle: HeaderStyle(
                           formatButtonVisible: false,
                           titleCentered: true,
-                          titleTextStyle: TextStyle(fontSize: 0),
-                          leftChevronIcon: Icon(Icons.chevron_left, color: Color(0xFF00FFCC), size: 40),
-                          rightChevronIcon: Icon(Icons.chevron_right, color: Color(0xFF00FFCC), size: 40),
-                          headerMargin: EdgeInsets.only(bottom: 5),
+                          titleTextStyle: const TextStyle(fontSize: 0),
+                          leftChevronIcon: Icon(Icons.chevron_left, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), size: 40),
+                          rightChevronIcon: Icon(Icons.chevron_right, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00FFCC), size: 40),
+                          headerMargin: const EdgeInsets.only(bottom: 5),
                         ),
                         onPageChanged: (focusedDay) {
                            setDialogState(() {
@@ -172,13 +173,13 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                         children: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text("キャンセル", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)), 
+                            child: Text("キャンセル", style: TextStyle(color: provider.mainTextColor, fontSize: 20, fontWeight: FontWeight.bold)), 
                           ),
                           const SizedBox(width: 30),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00FFCC),
-                              foregroundColor: Colors.black,
+                              backgroundColor: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC),
+                              foregroundColor: isWhite ? Colors.white : Colors.black,
                               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                             ),
                             onPressed: () {
@@ -208,11 +209,12 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
   @override
   Widget build(BuildContext context) {
     final dataProvider = Provider.of<DataProvider>(context);
+    final isWhite = dataProvider.displayMode == DisplayMode.pureWhite;
     final _modelDataMap = dataProvider.modelDataMap;
     final _isLoading = dataProvider.isLoading;
 
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFF00CCFF)));
+      return Center(child: CircularProgressIndicator(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF)));
     }
 
     ModelSummary? currentModel = _selectedModel != null ? _modelDataMap[_selectedModel!.name] : null;
@@ -220,241 +222,241 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
         ? currentModel.makerDetailsMap[_selectedMaker!.name] 
         : null;
 
-    return Row(
-      children: [
-        // 💡 左側：幅350の固定をやめ、比率(flex: 3)で全体の30%を割り当て
-        Expanded(
-          flex: 3,
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF14161E),
-              border: Border(right: BorderSide(color: Color(0xFF33363F))),
-            ),
-            child: Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Icon(Icons.list_alt, color: Color(0xFF00CCFF)),
-                      SizedBox(width: 10),
-                      Text("機種・メーカー選択", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    ],
+    return Container(
+      color: dataProvider.currentBgColor,
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Container(
+              decoration: BoxDecoration(
+                color: isWhite ? Colors.white : const Color(0xFF14161E),
+                border: Border(right: BorderSide(color: dataProvider.borderColor)),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        Icon(Icons.list_alt, color: isWhite ? const Color(0xFF008855) : const Color(0xFF00CCFF)),
+                        const SizedBox(width: 10),
+                        Text("機種・メーカー選択", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: dataProvider.mainTextColor)),
+                      ],
+                    ),
                   ),
-                ),
-                const Divider(color: Color(0xFF33363F), height: 1),
-                
-                _buildFilterUI(context, dataProvider),
-                
-                const Divider(color: Color(0xFF33363F), height: 1),
-                
-                Expanded(
-                  child: ListView(
-                    children: (() {
-                      final sortedList = _modelDataMap.values.toList()
-                        ..sort((a, b) => a.sortId.compareTo(b.sortId));
-                        
-                      return sortedList.map((summary) {
-                        bool isModelSelected = currentModel?.name == summary.name;
+                  Divider(color: dataProvider.borderColor, height: 1),
+                  
+                  _buildFilterUI(context, dataProvider, isWhite),
+                  
+                  Divider(color: dataProvider.borderColor, height: 1),
+                  
+                  Expanded(
+                    child: ListView(
+                      children: (() {
+                        final sortedList = _modelDataMap.values.toList()
+                          ..sort((a, b) => a.sortId.compareTo(b.sortId));
+                          
+                        return sortedList.map((summary) {
+                          bool isModelSelected = currentModel?.name == summary.name;
 
-                        bool overallHasWarning = 
-                            (summary.air > 0 && summary.airSpeed < summary.stdAir) ||
-                            (summary.clean > 0 && summary.cleanSpeed < summary.stdClean) ||
-                            (summary.swap > 0 && summary.swapSpeed < summary.stdSwap);
+                          bool overallHasWarning = 
+                              (summary.air > 0 && summary.airSpeed < summary.stdAir) ||
+                              (summary.clean > 0 && summary.cleanSpeed < summary.stdClean) ||
+                              (summary.swap > 0 && summary.swapSpeed < summary.stdSwap);
 
-                        Color baseColor = summary.totalFinished > 0 ? Colors.green.shade900 : Colors.blueGrey.shade900;
-                        
-                        bool needsExpansion = false;
-                        MakerDetails? singleMaker = summary.makerDetailsMap.isNotEmpty ? summary.makerDetailsMap.values.first : null;
-                        
-                        if (summary.makerDetailsMap.length > 1) {
-                          needsExpansion = true;
-                        } else if (singleMaker != null) {
-                          String abbr = singleMaker.abbr; 
-                          bool hasAbbr = abbr.isNotEmpty && abbr != singleMaker.name && singleMaker.name != "不明" && singleMaker.name != "null";
-                          needsExpansion = hasAbbr;
-                        }
+                          Color baseColor = summary.totalFinished > 0 ? (isWhite ? Colors.green.shade100 : Colors.green.shade900) : (isWhite ? Colors.grey.shade200 : Colors.blueGrey.shade900);
+                          
+                          bool needsExpansion = false;
+                          MakerDetails? singleMaker = summary.makerDetailsMap.isNotEmpty ? summary.makerDetailsMap.values.first : null;
+                          
+                          if (summary.makerDetailsMap.length > 1) {
+                            needsExpansion = true;
+                          } else if (singleMaker != null) {
+                            String abbr = singleMaker.abbr; 
+                            bool hasAbbr = abbr.isNotEmpty && abbr != singleMaker.name && singleMaker.name != "不明" && singleMaker.name != "null";
+                            needsExpansion = hasAbbr;
+                          }
 
-                        Widget leadingIcon = Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: overallHasWarning ? Colors.orange : Colors.white10,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            overallHasWarning ? Icons.priority_high_rounded : Icons.check_rounded,
-                            color: overallHasWarning ? Colors.black : Colors.greenAccent,
-                            size: 20,
-                          ),
-                        );
-
-                        Widget titleText = Text(
-                          summary.name, 
-                          style: TextStyle(
-                            color: Colors.white, 
-                            fontWeight: overallHasWarning ? FontWeight.w900 : FontWeight.bold,
-                            fontSize: 18,
-                            letterSpacing: 0.5,
-                          ),
-                        );
-
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 600),
-                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                baseColor.withOpacity(0.5),
-                                isModelSelected ? Colors.blue.withOpacity(0.4) : Colors.black26,
-                              ],
+                          Widget leadingIcon = Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: overallHasWarning ? (isWhite ? Colors.orange.shade200 : Colors.orange) : (isWhite ? Colors.grey.shade100 : Colors.white10),
+                              shape: BoxShape.circle,
                             ),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: overallHasWarning ? Colors.orangeAccent : (isModelSelected ? Colors.blue : Colors.white10),
-                              width: overallHasWarning ? 2 : 1,
+                            child: Icon(
+                              overallHasWarning ? Icons.priority_high_rounded : Icons.check_rounded,
+                              color: overallHasWarning ? (isWhite ? Colors.deepOrange : Colors.black) : (isWhite ? const Color(0xFF008855) : Colors.greenAccent),
+                              size: 20,
                             ),
-                            boxShadow: overallHasWarning ? [
-                              BoxShadow(
-                                color: Colors.orange.withOpacity(0.15),
-                                blurRadius: 8,
-                                spreadRadius: 1,
-                              )
-                            ] : [],
-                          ),
-                          child: needsExpansion 
-                            ? Theme(
-                                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                                child: ExpansionTile(
-                                  initiallyExpanded: isModelSelected,
-                                  collapsedIconColor: Colors.white70, 
-                                  iconColor: Colors.white,
-                                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                  leading: leadingIcon,
-                                  title: titleText,
-                                  children: summary.makerDetailsMap.values.map((md) {
-                                    bool isMakerSelected = isModelSelected && currentMaker?.name == md.name;
-                                    
-                                    String abbr = md.abbr; 
-                                    String displayName = abbr.isNotEmpty ? abbr : md.name;
-                                    if (displayName.isEmpty) displayName = "不明";
+                          );
 
-                                    double makerAirSpeed = md.airWorkMinutes > 0 ? (md.air / (md.airWorkMinutes / 60)) : 0;
-                                    double makerCleanSpeed = md.cleanWorkMinutes > 0 ? (md.clean / (md.cleanWorkMinutes / 60)) : 0;
-                                    double makerSwapSpeed = md.swapWorkMinutes > 0 ? (md.swap / (md.swapWorkMinutes / 60)) : 0;
+                          Widget titleText = Text(
+                            summary.name, 
+                            style: TextStyle(
+                              color: dataProvider.mainTextColor, 
+                              fontWeight: overallHasWarning ? FontWeight.w900 : FontWeight.bold,
+                              fontSize: 18,
+                              letterSpacing: 0.5,
+                            ),
+                          );
 
-                                    bool makerHasWarning = 
-                                        (md.air > 0 && makerAirSpeed < summary.stdAir) ||
-                                        (md.clean > 0 && makerCleanSpeed < summary.stdClean) ||
-                                        (md.swap > 0 && makerSwapSpeed < summary.stdSwap);
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 600),
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  baseColor.withOpacity(isWhite ? 0.9 : 0.5),
+                                  isModelSelected ? (isWhite ? const Color(0xFF007799).withOpacity(0.2) : Colors.blue.withOpacity(0.4)) : (isWhite ? Colors.white : Colors.black26),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: overallHasWarning ? Colors.orange.shade700 : (isModelSelected ? (isWhite ? const Color(0xFF007799) : Colors.blue) : dataProvider.borderColor),
+                                width: overallHasWarning || isModelSelected ? 2 : 1,
+                              ),
+                              boxShadow: overallHasWarning ? [
+                                BoxShadow(
+                                  color: Colors.orange.withOpacity(0.15),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                )
+                              ] : null,
+                            ),
+                            child: needsExpansion 
+                              ? Theme(
+                                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                                  child: ExpansionTile(
+                                    initiallyExpanded: isModelSelected,
+                                    collapsedIconColor: dataProvider.subTextColor, 
+                                    iconColor: dataProvider.mainTextColor,
+                                    tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                    leading: leadingIcon,
+                                    title: titleText,
+                                    children: summary.makerDetailsMap.values.map((md) {
+                                      bool isMakerSelected = isModelSelected && currentMaker?.name == md.name;
+                                      
+                                      String abbr = md.abbr; 
+                                      String displayName = abbr.isNotEmpty ? abbr : md.name;
+                                      if (displayName.isEmpty) displayName = "不明";
 
-                                    return InkWell(
-                                      onTap: () {
-                                        setState(() {
-                                          _selectedModel = summary;
-                                          _selectedMaker = md;
-                                        });
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                        decoration: BoxDecoration(
-                                          color: isMakerSelected 
-                                              ? Colors.blue.withOpacity(0.3) 
-                                              : (makerHasWarning ? Colors.orange.withOpacity(0.15) : Colors.transparent),
-                                          border: Border(
-                                            left: BorderSide(
-                                              color: isMakerSelected 
-                                                  ? Colors.blueAccent 
-                                                  : (makerHasWarning ? Colors.orangeAccent : Colors.transparent), 
-                                              width: 4
-                                            )
-                                          )
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            const SizedBox(width: 40),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(
+                                      double makerAirSpeed = md.airWorkMinutes > 0 ? (md.air / (md.airWorkMinutes / 60)) : 0;
+                                      double makerCleanSpeed = md.cleanWorkMinutes > 0 ? (md.clean / (md.cleanWorkMinutes / 60)) : 0;
+                                      double makerSwapSpeed = md.swapWorkMinutes > 0 ? (md.swap / (md.swapWorkMinutes / 60)) : 0;
+
+                                      bool makerHasWarning = 
+                                          (md.air > 0 && makerAirSpeed < summary.stdAir) ||
+                                          (md.clean > 0 && makerCleanSpeed < summary.stdClean) ||
+                                          (md.swap > 0 && makerSwapSpeed < summary.stdSwap);
+
+                                      return InkWell(
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedModel = summary;
+                                            _selectedMaker = md;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                          decoration: BoxDecoration(
+                                            color: isMakerSelected 
+                                                ? (isWhite ? const Color(0xFF007799).withOpacity(0.15) : Colors.blue.withOpacity(0.3)) 
+                                                : (makerHasWarning ? (isWhite ? Colors.orange.withOpacity(0.1) : Colors.orange.withOpacity(0.15)) : Colors.transparent),
+                                            border: Border(
+                                              left: BorderSide(
                                                 color: isMakerSelected 
-                                                    ? Colors.blueAccent 
-                                                    : (makerHasWarning ? Colors.orange.shade700 : Colors.white24),
-                                                borderRadius: BorderRadius.circular(4),
+                                                    ? (isWhite ? const Color(0xFF007799) : Colors.blueAccent) 
+                                                    : (makerHasWarning ? Colors.orangeAccent : Colors.transparent), 
+                                                width: 4
+                                              )
+                                            )
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const SizedBox(width: 40),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: isMakerSelected 
+                                                      ? (isWhite ? const Color(0xFF007799) : Colors.blueAccent) 
+                                                      : (makerHasWarning ? Colors.orange.shade700 : (isWhite ? Colors.grey.shade400 : Colors.white24)),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  "メーカー",
+                                                  style: TextStyle(color: isWhite && !isMakerSelected && !makerHasWarning ? Colors.black87 : Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                                ),
                                               ),
-                                              child: const Text(
-                                                "メーカー",
-                                                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Row(
-                                                children: [
-                                                  // 💡 機種名が長い場合のはみ出し防止
-                                                  Flexible(
-                                                    child: Text(
-                                                      displayName,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: TextStyle(
-                                                        color: makerHasWarning && !isMakerSelected ? Colors.orange.shade300 : Colors.white,
-                                                        fontWeight: FontWeight.w900,
-                                                        letterSpacing: 1.0,
-                                                        fontSize: 16,
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Row(
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        displayName,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: TextStyle(
+                                                          color: makerHasWarning && !isMakerSelected ? (isWhite ? Colors.orange.shade800 : Colors.orange.shade300) : dataProvider.mainTextColor,
+                                                          fontWeight: FontWeight.w900,
+                                                          letterSpacing: 1.0,
+                                                          fontSize: 16,
+                                                        ),
                                                       ),
                                                     ),
-                                                  ),
-                                                  if (makerHasWarning && !isMakerSelected) ...[
-                                                    const SizedBox(width: 8),
-                                                    const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 16),
-                                                  ]
-                                                ],
+                                                    if (makerHasWarning && !isMakerSelected) ...[
+                                                      const SizedBox(width: 8),
+                                                      Icon(Icons.warning_amber_rounded, color: isWhite ? Colors.orange.shade800 : Colors.orangeAccent, size: 16),
+                                                    ]
+                                                  ],
+                                                ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  }).toList(),
+                                      );
+                                    }).toList(),
+                                  ),
+                                )
+                              : ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                  leading: leadingIcon,
+                                  title: titleText,
+                                  trailing: const Icon(Icons.expand_more, color: Colors.transparent), 
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedModel = summary;
+                                      _selectedMaker = singleMaker;
+                                    });
+                                  },
                                 ),
-                              )
-                            : ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                leading: leadingIcon,
-                                title: titleText,
-                                trailing: const Icon(Icons.expand_more, color: Colors.transparent), 
-                                onTap: () {
-                                  setState(() {
-                                    _selectedModel = summary;
-                                    _selectedMaker = singleMaker;
-                                  });
-                                },
-                              ),
-                        );
-                      }).toList();
-                    })(),
+                          );
+                        }).toList();
+                      })(),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        
-        // 💡 右側：比率(flex: 7)で全体の70%を割り当て
-        Expanded(
-          flex: 7,
-          child: (currentModel == null || currentMaker == null)
-              ? const Center(child: Text("左のリストから機種を選択してください", style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.bold))) 
-              : _buildDetailView(currentModel, currentMaker, dataProvider),
-        ),
-      ],
+          
+          Expanded(
+            flex: 7,
+            child: (currentModel == null || currentMaker == null)
+                ? Center(child: Text("左のリストから機種を選択してください", style: TextStyle(color: dataProvider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold))) 
+                : _buildDetailView(currentModel, currentMaker, dataProvider, isWhite),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildFilterUI(BuildContext context, DataProvider provider) {
+  Widget _buildFilterUI(BuildContext context, DataProvider provider, bool isWhite) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      color: const Color(0xFF1A1C23),
+      color: provider.currentCardColor,
       child: Column(
         children: [
           Row(
@@ -463,7 +465,9 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                 child: _customToggleButton(
                   title: "全期間 (累計)", 
                   isSelected: provider.isSummaryCumulative, 
-                  onTap: () => provider.setSummaryMode(true)
+                  onTap: () => provider.setSummaryMode(true),
+                  provider: provider,
+                  isWhite: isWhite,
                 ),
               ),
               const SizedBox(width: 10),
@@ -473,7 +477,9 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                   isSelected: !provider.isSummaryCumulative, 
                   onTap: () {
                     provider.setSummaryMode(false);
-                  }
+                  },
+                  provider: provider,
+                  isWhite: isWhite,
                 ),
               ),
             ],
@@ -485,27 +491,26 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
                 decoration: BoxDecoration(
-                  color: Colors.black26,
+                  color: isWhite ? Colors.grey.shade100 : Colors.black26,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF33363F)),
+                  border: Border.all(color: provider.borderColor),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.date_range, color: Color(0xFF00CCFF), size: 18),
+                    Icon(Icons.date_range, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 18),
                     const SizedBox(width: 10),
-                    // 💡 小さい画面での日付はみ出し防止
                     Flexible(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
                           "${DateFormat('yyyy/MM/dd').format(provider.summaryStartDate)} 〜 ${DateFormat('yyyy/MM/dd').format(provider.summaryEndDate)}",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                          style: TextStyle(color: provider.mainTextColor, fontWeight: FontWeight.bold, fontSize: 15),
                         ),
                       ),
                     ),
                     const SizedBox(width: 5),
-                    const Icon(Icons.edit, color: Colors.white70, size: 16), 
+                    Icon(Icons.edit, color: provider.subTextColor, size: 16), 
                   ],
                 ),
               ),
@@ -516,7 +521,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
     );
   }
 
-  Widget _customToggleButton({required String title, required bool isSelected, required VoidCallback onTap}) {
+  Widget _customToggleButton({required String title, required bool isSelected, required VoidCallback onTap, required DataProvider provider, required bool isWhite}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -525,8 +530,8 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF00CCFF).withOpacity(0.2) : Colors.black12,
-          border: Border.all(color: isSelected ? const Color(0xFF00CCFF) : Colors.white10),
+          color: isSelected ? (isWhite ? const Color(0xFF007799).withOpacity(0.15) : const Color(0xFF00CCFF).withOpacity(0.2)) : (isWhite ? Colors.grey.shade200 : Colors.black12),
+          border: Border.all(color: isSelected ? (isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF)) : provider.borderColor),
           borderRadius: BorderRadius.circular(8),
         ),
         child: FittedBox(
@@ -534,7 +539,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
           child: Text(
             title,
             style: TextStyle(
-              color: isSelected ? const Color(0xFF00CCFF) : Colors.white70, 
+              color: isSelected ? (isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF)) : provider.subTextColor, 
               fontWeight: FontWeight.bold, 
               fontSize: 14
             ),
@@ -544,7 +549,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
     );
   }
 
-  Widget _buildDetailView(ModelSummary m, MakerDetails md, DataProvider provider) {
+  Widget _buildDetailView(ModelSummary m, MakerDetails md, DataProvider provider, bool isWhite) {
     double airSpeed = md.airWorkMinutes > 0 ? (md.air / (md.airWorkMinutes / 60)) : 0;
     double cleanSpeed = md.cleanWorkMinutes > 0 ? (md.clean / (md.cleanWorkMinutes / 60)) : 0;
     double swapSpeed = md.swapWorkMinutes > 0 ? (md.swap / (md.swapWorkMinutes / 60)) : 0;
@@ -557,17 +562,15 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- ヘッダー部分 ---
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // 💡 左側のタイトル部分をExpandedで囲み、長い機種名がはみ出ないようにする
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(hasAbbr ? "機種名 / メーカー" : "機種名", style: const TextStyle(color: Color(0xFF00CCFF), fontWeight: FontWeight.bold)),
+                    Text(hasAbbr ? "機種名 / メーカー" : "機種名", style: TextStyle(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), fontWeight: FontWeight.bold)),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -575,7 +578,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
-                            child: Text(m.name, style: const TextStyle(fontSize: 45, fontWeight: FontWeight.w900, color: Colors.white)),
+                            child: Text(m.name, style: TextStyle(fontSize: 45, fontWeight: FontWeight.w900, color: provider.mainTextColor)),
                           ),
                         ),
                         if (hasAbbr) ...[
@@ -585,11 +588,11 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.white10,
+                                color: isWhite ? Colors.grey.shade200 : Colors.white10,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.white24)
+                                border: Border.all(color: provider.borderColor)
                               ),
-                              child: Text(abbr, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)), 
+                              child: Text(abbr, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: provider.mainTextColor)), 
                             ),
                           ),
                         ],
@@ -602,46 +605,44 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text("メーカー完了合計", style: TextStyle(color: Color(0xFFFFD700), fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text("筐体完了合計", style: TextStyle(color: isWhite ? Colors.amber.shade800 : const Color(0xFFFFD700), fontWeight: FontWeight.bold, fontSize: 16)),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text("${md.totalFinished}", style: const TextStyle(fontSize: 65, fontWeight: FontWeight.w900, color: Color(0xFFFFD700))),
-                      const Text("台", style: TextStyle(fontSize: 24, color: Color(0xFFFFD700), fontWeight: FontWeight.bold)),
+                      Text(NumberFormat('#,##0').format(md.totalFinished), style: TextStyle(fontSize: 65, fontWeight: FontWeight.w900, color: isWhite ? Colors.amber.shade800 : const Color(0xFFFFD700))),
+                      Text("台", style: TextStyle(fontSize: 24, color: isWhite ? Colors.amber.shade800 : const Color(0xFFFFD700), fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ],
               ),
             ],
           ),
-          const Divider(color: Color(0xFF33363F), height: 20),
+          Divider(color: provider.borderColor, height: 20),
 
-          // --- 作業効率セクション ---
-          const Row(
+          Row(
             children: [
-              Icon(Icons.speed_rounded, color: Color(0xFF00CCFF), size: 28),
-              SizedBox(width: 10),
-              Text("作業効率", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)), 
+              Icon(Icons.speed_rounded, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 28),
+              const SizedBox(width: 10),
+              Text("作業効率", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: provider.mainTextColor)), 
             ],
           ),
           const SizedBox(height: 15),
           Row(
             children: [
-              _speedCard("エアー清掃", airSpeed, m.stdAir, const Color(0xFF00CCFF), Icons.air_rounded),
+              _speedCard("エアー清掃", airSpeed, m.stdAir, isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), Icons.air_rounded, isWhite, provider),
               const SizedBox(width: 15),
-              _speedCard("通常清掃", cleanSpeed, m.stdClean, const Color(0xFF00FFCC), Icons.cleaning_services_rounded),
+              _speedCard("通常清掃", cleanSpeed, m.stdClean, isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC), Icons.cleaning_services_rounded, isWhite, provider),
               const SizedBox(width: 15),
-              _speedCard("筐体交換", swapSpeed, m.stdSwap, Colors.amber, Icons.settings_outlined),
+              _speedCard("筐体交換", swapSpeed, m.stdSwap, isWhite ? Colors.amber.shade800 : Colors.amber, Icons.settings_outlined, isWhite, provider),
             ],
           ),
 
-          // --- 実績フロー ＆ 品質セクション ---
           const SizedBox(height: 20),
-          const Row(
+          Row(
             children: [
-              Icon(Icons.analytics_rounded, color: Color(0xFF00FFCC), size: 28),
-              SizedBox(width: 10),
-              Text("実績フロー ＆ 品質", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)), 
+              Icon(Icons.analytics_rounded, color: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC), size: 28),
+              const SizedBox(width: 10),
+              Text("実績フロー ＆ 品質", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: provider.mainTextColor)), 
             ],
           ),
           const SizedBox(height: 15),
@@ -654,19 +655,19 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF111319),
+                      color: isWhite ? Colors.white : const Color(0xFF111319),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF252830)),
+                      border: Border.all(color: provider.borderColor),
+                      boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))] : null,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        // 💡 幅を固定せずExpandedで均等に割り当てるように修正
-                        _buildFlowItem("エアー清掃", md.air, Icons.air_rounded, const Color(0xFF00CCFF), false),
-                        _buildFlowItem("清掃行き", md.toClean, Icons.forward_rounded, Colors.blueGrey, true),
-                        _buildFlowItem("通常清掃", md.clean, Icons.cleaning_services_rounded, const Color(0xFF00FFCC), true),
-                        _buildFlowItem("交換行き", md.toSwap, Icons.report_problem_outlined, Colors.orangeAccent, true),
-                        _buildFlowItem("交換完了", md.swap, Icons.settings_outlined, Colors.amber, true),
+                        _buildFlowItem("エアー清掃", md.air, Icons.air_rounded, isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), false, provider, isWhite),
+                        _buildFlowItem("清掃行き", md.toClean, Icons.forward_rounded, Colors.blueGrey, true, provider, isWhite),
+                        _buildFlowItem("通常清掃", md.clean, Icons.cleaning_services_rounded, isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC), true, provider, isWhite),
+                        _buildFlowItem("交換行き", md.toSwap, Icons.report_problem_outlined, Colors.orange.shade700, true, provider, isWhite),
+                        _buildFlowItem("交換完了", md.swap, Icons.settings_outlined, isWhite ? Colors.amber.shade800 : Colors.amber, true, provider, isWhite),
                       ],
                     ),
                   ),
@@ -677,28 +678,29 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1C23),
+                      color: provider.currentCardColor,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF33363F)),
+                      border: Border.all(color: provider.borderColor),
+                      boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))] : null,
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.query_stats_rounded, size: 16, color: Colors.white70), 
-                            SizedBox(width: 6),
+                            Icon(Icons.query_stats_rounded, size: 16, color: provider.subTextColor), 
+                            const SizedBox(width: 6),
                             FittedBox(
                               fit: BoxFit.scaleDown,
-                              child: Text("発生率概要", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70))
+                              child: Text("発生率概要", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: provider.subTextColor))
                             ), 
                           ],
                         ),
-                        const Divider(color: Color(0xFF33363F), height: 12),
-                        _rateGauge("エアー清掃率", md.airRate, const Color(0xFF00CCFF)),
+                        Divider(color: provider.borderColor, height: 12),
+                        _rateGauge("エアー清掃率", md.airRate, isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), provider, isWhite),
                         const SizedBox(height: 8),
-                        _rateGauge("筐体交換発生率", md.swapRate, Colors.redAccent),
+                        _rateGauge("筐体交換発生率", md.swapRate, isWhite ? Colors.red.shade700 : Colors.redAccent, provider, isWhite),
                       ],
                     ),
                   ),
@@ -712,16 +714,15 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
     );
   }
 
-  // 💡 固定の width: 95 を廃止し、Expandedで伸縮するように変更
-  Widget _buildFlowItem(String label, int count, IconData icon, Color color, bool showArrow) {
+  Widget _buildFlowItem(String label, int count, IconData icon, Color color, bool showArrow, DataProvider provider, bool isWhite) {
     return Expanded(
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (showArrow) 
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 2),
-              child: Icon(Icons.chevron_right_rounded, color: Color(0xFF33363F), size: 16), // 矢印を少し縮小
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Icon(Icons.chevron_right_rounded, color: provider.borderColor, size: 16),
             ),
           Expanded(
             child: Column(
@@ -732,15 +733,15 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
-                    "$count", 
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white), 
+                    NumberFormat('#,##0').format(count), 
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: provider.mainTextColor), 
                   ),
                 ),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
                     label, 
-                    style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.bold), 
+                    style: TextStyle(fontSize: 12, color: provider.subTextColor, fontWeight: FontWeight.bold), 
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -752,22 +753,26 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
     );
   }
 
-  Widget _speedCard(String label, double actual, double std, Color color, IconData icon) {
+  Widget _speedCard(String label, double actual, double std, Color color, IconData icon, bool isWhite, DataProvider provider) {
     final bool isZero = actual <= 0.0;
     final bool isEfficient = actual >= std;
 
-    Color mainColor;
+    Color statusColor;
+    Color borderColor;
     List<Color> gradientColors;
     
     if (isZero) {
-      mainColor = Colors.grey;
-      gradientColors = [const Color(0xFF1A1A1A), const Color(0xFF111111)];
+      statusColor = provider.subTextColor;
+      borderColor = provider.borderColor;
+      gradientColors = isWhite ? [Colors.grey.shade100, Colors.grey.shade50] : [const Color(0xFF1A1A1A), const Color(0xFF111111)];
     } else if (isEfficient) {
-      mainColor = Colors.greenAccent;
-      gradientColors = [const Color(0xFF0D3211), const Color(0xFF051506)];
+      statusColor = isWhite ? const Color(0xFF007A3D) : const Color(0xFF00E676);
+      borderColor = statusColor.withOpacity(isWhite ? 0.6 : 0.4);
+      gradientColors = isWhite ? [const Color(0xFFE8F5E9), Colors.white] : [const Color(0xFF0D3211), const Color(0xFF051506)];
     } else {
-      mainColor = Colors.orangeAccent;
-      gradientColors = [const Color(0xFF4D3300), const Color(0xFF261900)];
+      statusColor = isWhite ? const Color(0xFFD32F2F) : const Color(0xFFFF5252);
+      borderColor = statusColor.withOpacity(isWhite ? 0.6 : 0.4);
+      gradientColors = isWhite ? [const Color(0xFFFFEBEE), Colors.white] : [const Color(0xFF3E1414), const Color(0xFF1B0A0A)];
     }
 
     return Expanded(
@@ -782,12 +787,12 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
           ),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isZero ? Colors.white10 : mainColor.withOpacity(0.4),
-            width: 1.5,
+            color: borderColor,
+            width: isZero ? 1.5 : 2.0,
           ),
           boxShadow: !isZero ? [
             BoxShadow(
-              color: mainColor.withOpacity(isEfficient ? 0.05 : 0.15),
+              color: statusColor.withOpacity(isWhite ? 0.12 : 0.18),
               blurRadius: 15,
               spreadRadius: 2,
             )
@@ -795,51 +800,92 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
         ),
         child: Column(
           children: [
-            Icon(icon, color: isZero ? Colors.white54 : color, size: 32), 
-            const SizedBox(height: 12),
+            Icon(icon, color: isZero ? provider.subTextColor : color, size: 32), 
+            const SizedBox(height: 10),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
                 label, 
                 style: TextStyle(
                   fontSize: 18, 
-                  color: isZero ? Colors.white54 : color, 
+                  color: isZero ? provider.subTextColor : provider.mainTextColor, 
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.2
                 )
               ),
             ),
-            const SizedBox(height: 4),
-            // 💡 数値が大きくなってもはみ出さないようにFittedBox追加
+            const SizedBox(height: 8),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(
-                actual.toStringAsFixed(1), 
-                style: TextStyle(
-                  fontSize: 42, 
-                  fontWeight: FontWeight.w900, 
-                  color: isZero ? Colors.white54 : Colors.white, 
-                  fontFamily: 'monospace',
-                )
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (!isZero) ...[
+                    Icon(
+                      isEfficient ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                      color: statusColor,
+                      size: 36,
+                    ),
+                    const SizedBox(width: 2),
+                  ],
+                  Text(
+                    actual.toStringAsFixed(1), 
+                    style: TextStyle(
+                      fontSize: 46, 
+                      fontWeight: FontWeight.w900, 
+                      color: statusColor, 
+                      fontFamily: 'monospace',
+                      letterSpacing: -0.5,
+                    )
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    "台",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: provider.subTextColor,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: Colors.black26,
-                borderRadius: BorderRadius.circular(4),
+                color: isZero 
+                    ? (isWhite ? Colors.grey.shade200 : Colors.black26)
+                    : statusColor.withOpacity(isWhite ? 0.1 : 0.2),
+                borderRadius: BorderRadius.circular(6),
+                border: !isZero ? Border.all(color: statusColor.withOpacity(0.5), width: 1) : null,
               ),
-              // 💡 目標テキストのはみ出し防止
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(
-                  "目標: ${std.toStringAsFixed(1)}台/1H", 
-                  style: TextStyle(
-                    color: isZero ? Colors.white54 : Colors.white, 
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold 
-                  )
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "目標: ${std.toStringAsFixed(1)}台/1H", 
+                      style: TextStyle(
+                        color: provider.mainTextColor, 
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold 
+                      )
+                    ),
+                    if (!isZero) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        "${isEfficient ? '▲ +' : '▼ '}${(actual - std).toStringAsFixed(1)}",
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -849,7 +895,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
     );
   }
 
-  Widget _rateGauge(String label, double value, Color color) {
+  Widget _rateGauge(String label, double value, Color color, DataProvider provider, bool isWhite) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -859,7 +905,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
             Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13))
+                child: Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: provider.mainTextColor, fontSize: 13))
               )
             ), 
             Text("${value.toStringAsFixed(1)}%", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
@@ -871,7 +917,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
           child: LinearProgressIndicator(
             value: value / 100, 
             color: color, 
-            backgroundColor: Colors.white10, 
+            backgroundColor: isWhite ? Colors.grey.shade200 : Colors.white10, 
             minHeight: 8,
           ),
         ),
