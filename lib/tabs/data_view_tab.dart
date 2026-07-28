@@ -94,6 +94,9 @@ class _DataViewTabState extends State<DataViewTab> {
     final result = await showDialog<DateTime>(
       context: context,
       builder: (context) {
+        final dp = context.watch<DataProvider>();
+        final isWhite = dp.displayMode == DisplayMode.pureWhite;
+
         return StatefulBuilder(
           builder: (context, setDialogState) {
             List<int> years = List.generate(
@@ -102,84 +105,120 @@ class _DataViewTabState extends State<DataViewTab> {
             );
             List<int> months = List.generate(12, (i) => i + 1);
 
+            Color accentColor = isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC);
+            Color dropdownBg = isWhite ? const Color(0xFFF0F3F8) : const Color(0xFF1E2128);
+
             return AlertDialog(
-              backgroundColor: const Color(0xFF2A2D35),
-              title: const Text("日付を選択", style: TextStyle(color: Colors.white)),
+              backgroundColor: dp.currentCardColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(
+                  color: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC).withOpacity(0.6),
+                  width: isWhite ? 2 : 1.5,
+                ),
+              ),
+              elevation: isWhite ? 8 : 4,
+              shadowColor: isWhite ? Colors.black26 : const Color(0xFF00FFCC).withOpacity(0.2),
+              title: Row(
+                children: [
+                  Icon(Icons.calendar_month, color: accentColor, size: 28),
+                  const SizedBox(width: 12),
+                  Text("日付を選択", style: TextStyle(color: dp.mainTextColor, fontWeight: FontWeight.bold, fontSize: 22)),
+                ],
+              ),
               content: SizedBox(
                 width: 500,
-                height: 500,
+                height: 520,
                 child: Column(
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        DropdownButtonHideUnderline(
-                          child: DropdownButton<int>(
-                            dropdownColor: const Color(0xFF2A2D35),
-                            value: focusedDay.year,
-                            icon: const Icon(
-                              Icons.arrow_drop_down,
-                              color: Color(0xFF00FFCC),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: dropdownBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: isWhite ? Colors.grey.shade300 : Colors.white24),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              dropdownColor: isWhite ? Colors.white : const Color(0xFF252832),
+                              value: focusedDay.year,
+                              icon: Icon(
+                                Icons.arrow_drop_down,
+                                color: accentColor,
+                                size: 28,
+                              ),
+                              style: TextStyle(
+                                color: dp.mainTextColor,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              items: years.map((y) {
+                                return DropdownMenuItem(
+                                  value: y,
+                                  child: Text("$y年"),
+                                );
+                              }).toList(),
+                              onChanged: (newYear) {
+                                if (newYear != null) {
+                                  setDialogState(() {
+                                    focusedDay = DateTime(
+                                      newYear,
+                                      focusedDay.month,
+                                      1,
+                                    );
+                                  });
+                                }
+                              },
                             ),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            items: years.map((y) {
-                              return DropdownMenuItem(
-                                value: y,
-                                child: Text("$y年"),
-                              );
-                            }).toList(),
-                            onChanged: (newYear) {
-                              if (newYear != null) {
-                                setDialogState(() {
-                                  focusedDay = DateTime(
-                                    newYear,
-                                    focusedDay.month,
-                                    1,
-                                  );
-                                });
-                              }
-                            },
                           ),
                         ),
-                        DropdownButtonHideUnderline(
-                          child: DropdownButton<int>(
-                            dropdownColor: const Color(0xFF2A2D35),
-                            value: focusedDay.month,
-                            icon: const Icon(
-                              Icons.arrow_drop_down,
-                              color: Color(0xFF00FFCC),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: dropdownBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: isWhite ? Colors.grey.shade300 : Colors.white24),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<int>(
+                              dropdownColor: isWhite ? Colors.white : const Color(0xFF252832),
+                              value: focusedDay.month,
+                              icon: Icon(
+                                Icons.arrow_drop_down,
+                                color: accentColor,
+                                size: 28,
+                              ),
+                              style: TextStyle(
+                                color: dp.mainTextColor,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              items: months.map((m) {
+                                return DropdownMenuItem(
+                                  value: m,
+                                  child: Text("$m月"),
+                                );
+                              }).toList(),
+                              onChanged: (newMonth) {
+                                if (newMonth != null) {
+                                  setDialogState(() {
+                                    focusedDay = DateTime(
+                                      focusedDay.year,
+                                      newMonth,
+                                      1,
+                                    );
+                                  });
+                                }
+                              },
                             ),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            items: months.map((m) {
-                              return DropdownMenuItem(
-                                value: m,
-                                child: Text("$m月"),
-                              );
-                            }).toList(),
-                            onChanged: (newMonth) {
-                              if (newMonth != null) {
-                                setDialogState(() {
-                                  focusedDay = DateTime(
-                                    focusedDay.year,
-                                    newMonth,
-                                    1,
-                                  );
-                                });
-                              }
-                            },
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 15),
                     Expanded(
                       child: SingleChildScrollView(
                         child: TableCalendar(
@@ -196,36 +235,47 @@ class _DataViewTabState extends State<DataViewTab> {
                               focusedDay = newFocusedDay;
                             });
                           },
-                          calendarStyle: const CalendarStyle(
+                          calendarStyle: CalendarStyle(
                             selectedDecoration: BoxDecoration(
-                              color: Color(0xFF00FFCC),
+                              color: accentColor,
                               shape: BoxShape.circle,
+                            ),
+                            selectedTextStyle: TextStyle(
+                              color: isWhite ? Colors.white : Colors.black,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
                             ),
                             todayDecoration: BoxDecoration(
-                              color: Colors.white10,
+                              color: isWhite ? accentColor.withOpacity(0.2) : Colors.white10,
                               shape: BoxShape.circle,
+                              border: Border.all(color: accentColor, width: 2),
+                            ),
+                            todayTextStyle: TextStyle(
+                              color: isWhite ? accentColor : Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
                             ),
                             defaultTextStyle: TextStyle(
-                              color: Colors.white,
+                              color: dp.mainTextColor,
                               fontSize: 22,
                             ),
                             outsideTextStyle: TextStyle(
-                              color: Colors.white24,
+                              color: isWhite ? Colors.black26 : Colors.white24,
                               fontSize: 22,
                             ),
                             weekendTextStyle: TextStyle(
-                              color: Colors.redAccent,
+                              color: isWhite ? Colors.red.shade700 : Colors.redAccent,
                               fontSize: 22,
                             ),
                           ),
                           calendarBuilders: CalendarBuilders(
                             dowBuilder: (context, day) {
                               if (day.weekday == DateTime.saturday) {
-                                return const Center(
+                                return Center(
                                   child: Text(
                                     '土',
                                     style: TextStyle(
-                                      color: Colors.blueAccent,
+                                      color: isWhite ? Colors.blue.shade700 : Colors.blueAccent,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 20,
                                     ),
@@ -233,11 +283,11 @@ class _DataViewTabState extends State<DataViewTab> {
                                 );
                               }
                               if (day.weekday == DateTime.sunday) {
-                                return const Center(
+                                return Center(
                                   child: Text(
                                     '日',
                                     style: TextStyle(
-                                      color: Colors.redAccent,
+                                      color: isWhite ? Colors.red.shade700 : Colors.redAccent,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 20,
                                     ),
@@ -251,8 +301,8 @@ class _DataViewTabState extends State<DataViewTab> {
                                 return Center(
                                   child: Text(
                                     '${day.day}',
-                                    style: const TextStyle(
-                                      color: Colors.blueAccent,
+                                    style: TextStyle(
+                                      color: isWhite ? Colors.blue.shade700 : Colors.blueAccent,
                                       fontSize: 22,
                                     ),
                                   ),
@@ -262,20 +312,23 @@ class _DataViewTabState extends State<DataViewTab> {
                             },
                           ),
                           daysOfWeekHeight: 50,
-                          headerStyle: const HeaderStyle(
+                          headerStyle: HeaderStyle(
                             formatButtonVisible: false,
                             titleCentered: true,
                             leftChevronIcon: Icon(
                               Icons.chevron_left,
-                              color: Colors.white,
+                              color: dp.mainTextColor,
+                              size: 30,
                             ),
                             rightChevronIcon: Icon(
                               Icons.chevron_right,
-                              color: Colors.white,
+                              color: dp.mainTextColor,
+                              size: 30,
                             ),
                             titleTextStyle: TextStyle(
-                              color: Colors.white,
+                              color: dp.mainTextColor,
                               fontSize: 20,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
@@ -284,18 +337,22 @@ class _DataViewTabState extends State<DataViewTab> {
                   ],
                 ),
               ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text(
+                  child: Text(
                     "キャンセル",
-                    style: TextStyle(color: Colors.white70, fontSize: 18),
+                    style: TextStyle(color: dp.subTextColor, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00FFCC),
-                    foregroundColor: Colors.black,
+                    backgroundColor: accentColor,
+                    foregroundColor: isWhite ? Colors.white : Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: isWhite ? 3 : 0,
                   ),
                   onPressed: () {
                     if (selectedDay != null) {

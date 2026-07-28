@@ -61,7 +61,7 @@ class SettingsTab extends StatelessWidget {
                       Expanded(
                         child: _buildModeCard(
                           title: "☀️ 白モード\n(明るい背景)",
-                          subtitle: "【おすすめの場面・特長】\n• 強い照明や蛍光灯による光の反射を防ぎたい場合\n• 紙の書類と同じような見え方で確認したい場合\n• 日中や工場内などの明るい場所での利用に最適",
+                          subtitle: "【おすすめの場面・特長】\n• 強い照明や蛍光灯の光反射を防ぎたい時\n• 紙の書類と同じような感覚で確認したい時\n• 日中や明るい工場内でのご利用に最適",
                           icon: Icons.wb_sunny,
                           accentColor: Colors.amber.shade700,
                           cardColor: Colors.white,
@@ -75,7 +75,7 @@ class SettingsTab extends StatelessWidget {
                       Expanded(
                         child: _buildModeCard(
                           title: "🌙 黒モード\n(暗い背景・ダーク)",
-                          subtitle: "【おすすめの場面・特長】\n• 目を疲れにくくして長時間作業したい場合\n• 従来の引き締まったダーク色の画面が良い場合\n• 夜間や少し暗がりでの使用や節電に最適",
+                          subtitle: "【おすすめの場面・特長】\n• 目の疲れを抑えて長時間作業したい時\n• 従来の引き締まったダーク画面が良い時\n• 夜間や少し暗がりの場所や節電に最適",
                           icon: Icons.nightlight_round,
                           accentColor: const Color(0xFF00FFCC),
                           cardColor: const Color(0xFF1A1C23),
@@ -171,18 +171,23 @@ class SettingsTab extends StatelessWidget {
                 const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
                     color: textColor.withOpacity(0.04),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text(
-                    subtitle,
-                    textAlign: TextAlign.left,
-                    style: TextStyle(
-                      color: textColor.withOpacity(0.9),
-                      fontSize: 14,
-                      height: 1.6,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      subtitle,
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                        color: textColor.withOpacity(0.9),
+                        fontSize: 14.5,
+                        height: 1.65,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
