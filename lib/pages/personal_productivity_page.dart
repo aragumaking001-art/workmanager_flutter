@@ -7,7 +7,14 @@ import '../main.dart';
 import '../providers/data_provider.dart';
 
 class PersonalProductivityPage extends StatefulWidget {
-  const PersonalProductivityPage({super.key});
+  final String? initialWorkerId;
+  final bool isKioskMode;
+
+  const PersonalProductivityPage({
+    super.key,
+    this.initialWorkerId,
+    this.isKioskMode = false,
+  });
 
   @override
   State<PersonalProductivityPage> createState() => _PersonalProductivityPageState();
@@ -34,10 +41,42 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
     DateTime now = DateTime.now();
     _startDate = DateTime(now.year, now.month, 1);
     _endDate = DateTime(now.year, now.month + 1, 0); // 月末
+    
+    // 💡 Kioskモード時はデフォルトで全期間表示にする（過去の実績もすべて表示）
+    if (widget.isKioskMode) {
+      _isAllTime = true;
+    }
+    
+    // Kioskモード時は初期ワーカーID（NFC IDなど）を名前に変換してセット
+    if (widget.initialWorkerId != null) {
+      // DataProviderのインスタンスをビルド前なので context.read または後で取得する
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final dp = Provider.of<DataProvider>(context, listen: false);
+        // NFC IDがworkerStatsMapにある場合、その名前を取得
+        if (dp.workerStatsMap.containsKey(widget.initialWorkerId)) {
+          setState(() {
+            _selectedWorker = dp.workerStatsMap[widget.initialWorkerId!]?.name ?? widget.initialWorkerId;
+          });
+        } else {
+          setState(() {
+            _selectedWorker = widget.initialWorkerId;
+          });
+        }
+        _fetchProductivityData();
+      });
+    }
+
     _fetchWorkers().then((_) {
       if (_workers.isNotEmpty) {
-        _selectedWorker = _workers.first;
-        _fetchProductivityData();
+        // もし_selectedWorkerが設定されていなければ最初のワーカーを選択
+        if (_selectedWorker == null) {
+          setState(() {
+            _selectedWorker = _workers.first;
+          });
+          if (widget.initialWorkerId == null) {
+             _fetchProductivityData();
+          }
+        }
       }
     });
     _fetchRankingData();
@@ -232,7 +271,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
         LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
         LEFT JOIN (
           SELECT model_name,
-            MIN(CASE WHEN csv_id = '' OR csv_id = '0' THEN 9999 ELSE CAST(csv_id AS UNSIGNED) END) as sort_id,
+            MIN(sort_order) as sort_id,
             MAX(CASE WHEN work_type = 'エアー清掃' THEN std_qty END) as std_air,
             MAX(CASE WHEN work_type = '清掃' THEN std_qty END) as std_clean,
             MAX(CASE WHEN work_type = '筐体交換' THEN std_qty END) as std_swap
@@ -674,6 +713,19 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
     final dp = context.watch<DataProvider>();
     final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
+    if (widget.isKioskMode) {
+      // Kioskモードの時は、上部のAppBarとタブバーを消して（またはシンプルにして）個人別詳細のみ表示する
+      return Scaffold(
+        backgroundColor: dp.currentBgColor,
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: _buildPersonalTab(),
+          ),
+        ),
+      );
+    }
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -772,38 +824,40 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.person, color: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent, size: 28),
-                  const SizedBox(width: 10),
-                  Text("担当者:", style: TextStyle(color: dp.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 15),
-                      decoration: BoxDecoration(
-                        color: isWhite ? const Color(0xFFEAEEF6) : const Color(0xFF222736),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: isWhite ? const Color(0xFF7D8AB2) : const Color(0xFF546394), width: 1.3),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          dropdownColor: dp.currentCardColor,
-                          icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent),
-                          style: TextStyle(color: dp.mainTextColor, fontSize: 20, fontWeight: FontWeight.bold),
-                          value: _selectedWorker,
-                          items: _workers.map((w) => DropdownMenuItem(value: w, child: Text(w, style: TextStyle(color: dp.mainTextColor)))).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedWorker = val);
-                              _fetchProductivityData();
-                            }
-                          },
+                  if (!widget.isKioskMode) ...[
+                    Icon(Icons.person, color: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent, size: 28),
+                    const SizedBox(width: 10),
+                    Text("担当者:", style: TextStyle(color: dp.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      flex: 2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 15),
+                        decoration: BoxDecoration(
+                          color: isWhite ? const Color(0xFFEAEEF6) : const Color(0xFF222736),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: isWhite ? const Color(0xFF7D8AB2) : const Color(0xFF546394), width: 1.3),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            dropdownColor: dp.currentCardColor,
+                            icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent),
+                            style: TextStyle(color: dp.mainTextColor, fontSize: 20, fontWeight: FontWeight.bold),
+                            value: _selectedWorker,
+                            items: _workers.map((w) => DropdownMenuItem(value: w, child: Text(w, style: TextStyle(color: dp.mainTextColor)))).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedWorker = val);
+                                _fetchProductivityData();
+                              }
+                            },
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 30),
+                    const SizedBox(width: 30),
+                  ],
                   Icon(Icons.calendar_month, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), size: 28),
                   const SizedBox(width: 10),
                   Text("対象期間:", style: TextStyle(color: dp.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)),
@@ -938,6 +992,15 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                         } else if (achievePercent >= 80) {
                           progressColor = isWhite ? const Color(0xFFD45500) : Colors.orangeAccent;
                         }
+                        
+                        String timeDisplay = "";
+                        int h = (totalMinutes / 60).floor();
+                        int m = (totalMinutes % 60).round();
+                        if (h > 0) {
+                          timeDisplay = "${h}時間${m}分";
+                        } else {
+                          timeDisplay = "${m}分";
+                        }
 
                         String workType = item['work_type'] ?? "不明";
                         Color typeColor = isWhite ? Colors.grey.shade700 : Colors.grey;
@@ -1016,7 +1079,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                                     mainAxisAlignment: MainAxisAlignment.end,
                                     children: [
                                       Text("処理数: $totalQty台", style: TextStyle(fontSize: 13, color: dp.mainTextColor, fontWeight: FontWeight.bold)),
-                                      Text("時間: ${totalMinutes.toStringAsFixed(0)}分", style: TextStyle(fontSize: 13, color: dp.mainTextColor, fontWeight: FontWeight.bold)),
+                                      Text("時間: $timeDisplay", style: TextStyle(fontSize: 13, color: dp.mainTextColor, fontWeight: FontWeight.bold)),
                                     ],
                                   )
                                 ],

@@ -9,10 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  # 💡 dependenciesの直下に配置
+  mobile_scanner: ^7.4.0
   video_player: ^2.8.1
   cupertino_icons: ^1.0.8
-  #mysql1: ^0.20.0
   mysql_client: ^0.0.27
   provider: ^6.1.5+1
   window_manager: ^0.5.1
@@ -20,6 +19,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   table_calendar: ^3.1.2
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
@@ -33,6 +33,9 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
+  windows:
+    generate: true
+    image_path: "assets/app_icon_windows.png"
   image_path: "assets/app_icon.png"
   adaptive_icon_background: "#0F1115" 
   adaptive_icon_foreground: "assets/app_icon.png"
@@ -51,4 +54,16 @@ flutter:
   assets:
     - assets/videos/splash_logo.mp4
     - assets/app_icon.png
+    - assets/mascot.png
+    - assets/frame_wood.png
+    - assets/frame_iron.png
+    - assets/frame_bronze.png
+    - assets/frame_silver.png
+    - assets/frame_gold.png
+    - assets/nameplate_wood.png
+    - assets/nameplate_iron.png
+    - assets/nameplate_bronze.png
+    - assets/nameplate_silver.png
+    - assets/nameplate_gold.png
+    - assets/nameplate_gold_wide.png
   uses-material-design: true

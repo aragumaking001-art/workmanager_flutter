@@ -65,7 +65,7 @@ class _DataEditTabState extends State<DataEditTab> {
           maker_abbr,
           work_type,
           std_qty,
-          CAST(NULLIF(csv_id, '') AS UNSIGNED) as sort_id
+          sort_order as sort_id
         FROM m_models 
         ORDER BY sort_id ASC
       ''');
@@ -102,7 +102,7 @@ class _DataEditTabState extends State<DataEditTab> {
       String dateStr = DateFormat('yyyy-MM-dd').format(targetDate);
       var result = await conn.execute('''
         SELECT 
-          l.id, l.model_name, l.maker, l.maker_abbr, l.worker_id, l.clean_qty, l.air_clean_qty, 
+          l.id, l.work_date, l.model_name, l.maker, l.maker_abbr, l.worker_id, l.clean_qty, l.air_clean_qty, 
           l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty, l.work_minutes,
           mem.worker_name
         FROM unit_cleaning_logs l
@@ -179,6 +179,7 @@ class _DataEditTabState extends State<DataEditTab> {
                   Divider(color: provider.borderColor, height: 25),
 
                   _buildCompareRow("作業区分", oldWorkType, targetWorkType, provider, isWhite, isText: true),
+                  _buildCompareRow("作業日", oldLog['work_date'] ?? '不明', newData['work_date'] ?? '不明', provider, isWhite, isText: true),
                   _buildCompareRow("機種名", oldModelDisplay, newModelDisplay, provider, isWhite, isText: true),
                   _buildCompareRow("作業時間(分)", double.tryParse(oldLog['work_minutes']?.toString() ?? '0') ?? 0, newData['work_minutes'], provider, isWhite),
                   
@@ -365,6 +366,24 @@ class _DataEditTabState extends State<DataEditTab> {
       targetWorkType = "清掃";
     }
 
+    dynamic oldDateVal = log['work_date'];
+    DateTime initDate = DateTime.now();
+    if (oldDateVal != null) {
+      if (oldDateVal is DateTime) {
+        initDate = oldDateVal;
+      } else {
+        try {
+          String oldDateStr = oldDateVal.toString();
+          if (oldDateStr.isNotEmpty) {
+            initDate = DateTime.parse(oldDateStr.replaceAll('/', '-'));
+          }
+        } catch (e) {
+          initDate = DateTime.now();
+        }
+      }
+    }
+    DateTime selectedDate = initDate;
+
     List<Map<String, dynamic>> availableModels = [];
     Set<String> addedKeys = {}; 
 
@@ -414,13 +433,26 @@ class _DataEditTabState extends State<DataEditTab> {
 
             return AlertDialog(
               backgroundColor: provider.currentCardColor,
-              title: Column(
+              title: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("実績データの修正", style: TextStyle(color: provider.mainTextColor, fontSize: 24, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text("作業者: $workerName ", style: TextStyle(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text("作業区分: $targetWorkType", style: TextStyle(color: provider.subTextColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("実績データの修正", style: TextStyle(color: provider.mainTextColor, fontSize: 24, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text("作業者: $workerName ", style: TextStyle(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text("作業区分: $targetWorkType", style: TextStyle(color: provider.subTextColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, color: isWhite ? Colors.grey.shade300 : Colors.white24, size: 24),
+                    tooltip: "データを削除",
+                    onPressed: () {
+                      _showDeleteConfirmDialog(log, id, targetWorkType, selectedDate);
+                    },
+                  ),
                 ],
               ),
               content: SingleChildScrollView(
@@ -431,6 +463,35 @@ class _DataEditTabState extends State<DataEditTab> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "作業日: ${selectedDate.year}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.day.toString().padLeft(2, '0')}", 
+                            style: TextStyle(color: provider.mainTextColor, fontSize: 18, fontWeight: FontWeight.bold)
+                          ),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.calendar_today, size: 20),
+                            label: const Text("日付を変更", style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF),
+                              foregroundColor: isWhite ? Colors.white : Colors.black,
+                            ),
+                            onPressed: () async {
+                              final picked = await _showCustomDatePickerDialog(selectedDate);
+                              if (picked != null) {
+                                setDialogState(() {
+                                  selectedDate = picked;
+                                });
+                              }
+                            },
+                          )
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Divider(color: provider.borderColor, height: 1),
+                      const SizedBox(height: 15),
+
                       Text("作業区分", style: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Container(
@@ -614,6 +675,7 @@ class _DataEditTabState extends State<DataEditTab> {
                   ),
                   onPressed: () {
                     Map<String, dynamic> newData = {
+                      "work_date": "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}",
                       "model_name": selectedModel,
                       "maker": makerFull,       
                       "maker_abbr": makerAbbr,  
@@ -653,6 +715,115 @@ class _DataEditTabState extends State<DataEditTab> {
           contentPadding: const EdgeInsets.symmetric(vertical: 12),
         ),
       ),
+    );
+  }
+
+  void _showDeleteConfirmDialog(Map<String, dynamic> log, int id, String targetWorkType, DateTime workDate) {
+    final provider = Provider.of<DataProvider>(context, listen: false);
+    final bool isWhite = provider.displayMode == DisplayMode.pureWhite;
+    String workerName = log['worker_name'] ?? log['worker_id'] ?? "不明";
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: isWhite ? Colors.red.shade50 : const Color(0xFF330000),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.red.shade900, width: 4)
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.warning, color: Colors.red.shade700, size: 48),
+              const SizedBox(width: 15),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    "データ削除の確認", 
+                    style: TextStyle(color: Colors.red.shade700, fontSize: 32, fontWeight: FontWeight.bold)
+                  ),
+                )
+              ),
+            ],
+          ),
+          content: Container(
+            width: MediaQuery.of(context).size.width * 0.8,
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("本当に以下の作業データを削除してもよろしいですか？", style: TextStyle(color: provider.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                Text("※この操作は元に戻すことができません！", style: TextStyle(color: Colors.red.shade600, fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: provider.currentCardColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200)
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("作業日: ${workDate.year}/${workDate.month}/${workDate.day}", style: TextStyle(color: provider.mainTextColor, fontSize: 18)),
+                      Text("作業者: $workerName", style: TextStyle(color: provider.mainTextColor, fontSize: 18)),
+                      Text("作業区分: $targetWorkType", style: TextStyle(color: provider.mainTextColor, fontSize: 18)),
+                      Text("機種名: ${log['model_name']}", style: TextStyle(color: provider.mainTextColor, fontSize: 18)),
+                    ]
+                  )
+                )
+              ]
+            )
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context), 
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Text("キャンセル", style: TextStyle(color: provider.subTextColor, fontSize: 20, fontWeight: FontWeight.bold)), 
+              )
+            ),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700, 
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 15) 
+              ),
+              onPressed: () async {
+                bool success = await provider.deleteLogData(id);
+                if (mounted) {
+                  Navigator.pop(context); // 削除確認ダイアログを閉じる
+                  Navigator.pop(context); // 編集ダイアログも閉じる
+                  
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("データを削除しました"), backgroundColor: Colors.red),
+                    );
+                    if (_currentMode == EditMode.today) {
+                      _fetchLogs(DateTime.now());
+                    } else if (_currentMode == EditMode.previousDay && _selectedPrevDate != null) {
+                      _fetchLogs(_selectedPrevDate!);
+                    } else if (_currentMode == EditMode.past && _selectedPastDate != null) {
+                      _fetchLogs(_selectedPastDate!);
+                    }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("削除に失敗しました"), backgroundColor: Colors.orange),
+                    );
+                  }
+                }
+              },
+              child: const Text("完全に削除する", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      }
     );
   }
 
@@ -759,11 +930,11 @@ class _DataEditTabState extends State<DataEditTab> {
     );
   }
 
-  Future<void> _pickCustomDate() async {
+  Future<DateTime?> _showCustomDatePickerDialog(DateTime initialDate) async {
     final dp = Provider.of<DataProvider>(context, listen: false);
     final bool isWhite = dp.displayMode == DisplayMode.pureWhite;
-    DateTime _focusedDay = _selectedPastDate ?? DateTime.now().subtract(const Duration(days: 1));
-    DateTime? _selectedDay = _selectedPastDate;
+    DateTime _focusedDay = initialDate;
+    DateTime? _selectedDay = initialDate;
 
     List<int> years = List.generate(11, (index) => 2020 + index);
     List<int> months = List.generate(12, (index) => index + 1);
@@ -950,6 +1121,12 @@ class _DataEditTabState extends State<DataEditTab> {
       },
     );
 
+    return result;
+  }
+
+  Future<void> _pickCustomDate() async {
+    DateTime initial = _selectedPastDate ?? DateTime.now().subtract(const Duration(days: 1));
+    final result = await _showCustomDatePickerDialog(initial);
     if (result != null) {
       setState(() {
         _selectedPastDate = result;

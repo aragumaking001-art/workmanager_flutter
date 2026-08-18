@@ -39,7 +39,7 @@ class _GoalListTabState extends State<GoalListTab> {
           MAX(CASE WHEN work_type = 'エアー清掃' THEN std_qty END) as std_air,
           MAX(CASE WHEN work_type = '清掃' THEN std_qty END) as std_clean,
           MAX(CASE WHEN work_type = '筐体交換' THEN std_qty END) as std_swap,
-          MIN(CAST(NULLIF(csv_id, '') AS UNSIGNED)) as sort_id
+          MIN(sort_order) as sort_id
         FROM m_models 
         GROUP BY model_name
         ORDER BY sort_id ASC
