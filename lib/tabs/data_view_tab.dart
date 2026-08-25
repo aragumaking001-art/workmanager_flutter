@@ -5,6 +5,8 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 import '../providers/data_provider.dart';
 
+enum SearchMode { date, worker }
+
 class DataViewTab extends StatefulWidget {
   const DataViewTab({super.key});
 
@@ -17,6 +19,9 @@ class _DataViewTabState extends State<DataViewTab> {
   List<Map<String, dynamic>> _logs = [];
   bool _isFetching = false;
   String? _selectedWorkerFilter;
+  SearchMode _currentMode = SearchMode.date;
+  String? _selectedWorkerForSearch;
+  List<Map<String, dynamic>> _allWorkers = [];
 
   List<String> get _uniqueWorkers {
     Set<String> workers = {};
@@ -41,6 +46,7 @@ class _DataViewTabState extends State<DataViewTab> {
   @override
   void initState() {
     super.initState();
+    _fetchWorkers();
     _fetchLogs(_selectedDate);
   }
 
@@ -72,6 +78,73 @@ class _DataViewTabState extends State<DataViewTab> {
         ORDER BY l.id DESC
       ''',
         {"d": dateStr},
+      );
+
+      List<Map<String, dynamic>> temp = [];
+      for (var row in result.rows) {
+        temp.add(row.assoc());
+      }
+      _logs = temp;
+    } catch (e) {
+      print("ログ取得エラー: $e");
+    } finally {
+      await conn.close();
+      setState(() => _isFetching = false);
+    }
+  }
+
+  Future<void> _fetchWorkers() async {
+    final conn = await MySQLConnection.createConnection(
+      host: '192.168.10.101',
+      port: 3306,
+      userName: 'work_user',
+      password: 'work1234',
+      databaseName: 'work_manager_db',
+    );
+    try {
+      await conn.connect();
+      var result = await conn.execute('SELECT worker_id, worker_name FROM m_members ORDER BY worker_id ASC');
+      List<Map<String, dynamic>> temp = [];
+      for (var row in result.rows) {
+        temp.add(row.assoc());
+      }
+      setState(() {
+        _allWorkers = temp;
+      });
+    } catch (e) {
+      print("作業者マスター取得エラー: $e");
+    } finally {
+      await conn.close();
+    }
+  }
+
+  Future<void> _fetchLogsByWorker(String workerId) async {
+    setState(() {
+      _isFetching = true;
+    });
+
+    final conn = await MySQLConnection.createConnection(
+      host: '192.168.10.101',
+      port: 3306,
+      userName: 'work_user',
+      password: 'work1234',
+      databaseName: 'work_manager_db',
+    );
+    try {
+      await conn.connect();
+      var result = await conn.execute(
+        '''
+        SELECT 
+          l.id, l.work_date, l.model_name, l.maker, l.maker_abbr, l.worker_id, 
+          l.clean_qty, l.air_clean_qty, l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty,
+          l.start_time_str, l.end_time_str, l.work_minutes, l.edit_count,
+          mem.worker_name
+        FROM unit_cleaning_logs l
+        LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
+        WHERE l.worker_id = :w 
+        ORDER BY l.id DESC
+      ''',
+        {"w": workerId},
       );
 
       List<Map<String, dynamic>> temp = [];
@@ -404,30 +477,126 @@ class _DataViewTabState extends State<DataViewTab> {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 8.0,
-            ),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.calendar_month),
-              label: Text(
-                DateFormat('yyyy年MM月dd日').format(_selectedDate),
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: SegmentedButton<SearchMode>(
+              segments: const [
+                ButtonSegment<SearchMode>(
+                  value: SearchMode.date,
+                  label: Text('日付で検索'),
+                  icon: Icon(Icons.calendar_month),
                 ),
+                ButtonSegment<SearchMode>(
+                  value: SearchMode.worker,
+                  label: Text('作業者で検索'),
+                  icon: Icon(Icons.person_search),
+                ),
+              ],
+              selected: <SearchMode>{_currentMode},
+              onSelectionChanged: (Set<SearchMode> newSelection) {
+                setState(() {
+                  _currentMode = newSelection.first;
+                  if (_currentMode == SearchMode.date) {
+                    _fetchLogs(_selectedDate);
+                  } else {
+                    if (_selectedWorkerForSearch != null) {
+                      _fetchLogsByWorker(_selectedWorkerForSearch!);
+                    } else {
+                      _logs = [];
+                    }
+                  }
+                });
+              },
+              style: ButtonStyle(
+                backgroundColor: MaterialStateProperty.resolveWith<Color>((states) {
+                  if (states.contains(MaterialState.selected)) {
+                    return isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF);
+                  }
+                  return dp.currentCardColor;
+                }),
+                foregroundColor: MaterialStateProperty.resolveWith<Color>((states) {
+                  if (states.contains(MaterialState.selected)) {
+                    return isWhite ? Colors.white : Colors.black;
+                  }
+                  return dp.mainTextColor;
+                }),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isWhite
-                    ? const Color(0xFF007799)
-                    : const Color(0xFF00CCFF),
-                foregroundColor: isWhite ? Colors.white : Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                elevation: isWhite ? 2 : 0,
-              ),
-              onPressed: _showCalendarDialog,
             ),
           ),
+          if (_currentMode == SearchMode.date)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Center(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: _showCalendarDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: isWhite ? [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, 2))] : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.calendar_month, size: 20, color: isWhite ? Colors.white : Colors.black),
+                          const SizedBox(width: 6),
+                          Text(
+                            DateFormat('yyyy年MM月dd日').format(_selectedDate),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isWhite ? Colors.white : Colors.black,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (_currentMode == SearchMode.worker)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Center(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: dp.currentCardColor,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), width: 2),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      isDense: true,
+                      iconSize: 20,
+                      dropdownColor: dp.currentCardColor,
+                      hint: Text("作業者を選択", style: TextStyle(color: dp.subTextColor, fontSize: 14)),
+                      value: _selectedWorkerForSearch,
+                      icon: Icon(Icons.arrow_drop_down, color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF)),
+                      style: TextStyle(color: dp.mainTextColor, fontSize: 16, fontWeight: FontWeight.bold),
+                      items: _allWorkers.map((w) {
+                        return DropdownMenuItem<String>(
+                          value: w['worker_id'].toString(),
+                          child: Text(w['worker_name']?.toString() ?? w['worker_id']?.toString() ?? '不明'),
+                        );
+                      }).toList(),
+                      onChanged: (newWorkerId) {
+                        if (newWorkerId != null) {
+                          setState(() {
+                            _selectedWorkerForSearch = newWorkerId;
+                          });
+                          _fetchLogsByWorker(newWorkerId);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
           const Center(child: _ConnectionStatusIndicator()),
           const SizedBox(width: 20),
         ],
@@ -485,7 +654,7 @@ class _DataViewTabState extends State<DataViewTab> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          "作業者",
+                                          _currentMode == SearchMode.worker ? "作業日" : "作業者",
                                           style: TextStyle(
                                             color: headerColor,
                                             fontSize: 18,
@@ -493,12 +662,13 @@ class _DataViewTabState extends State<DataViewTab> {
                                           ),
                                         ),
                                         const SizedBox(width: 4),
-                                        PopupMenuButton<String>(
-                                          icon: Icon(
-                                            Icons.filter_list_rounded,
-                                            color: headerColor,
-                                            size: 20,
-                                          ),
+                                        if (_currentMode == SearchMode.date)
+                                          PopupMenuButton<String>(
+                                            icon: Icon(
+                                              Icons.filter_list_rounded,
+                                              color: headerColor,
+                                              size: 20,
+                                            ),
                                           color: dp.currentCardColor,
                                           tooltip: "作業者で絞り込み",
                                           onSelected: (val) {
@@ -634,6 +804,16 @@ class _DataViewTabState extends State<DataViewTab> {
                                       log['worker_name'] ??
                                       log['worker_id'] ??
                                       "不明";
+
+                                  String workDateStr = "-";
+                                  if (log['work_date'] != null) {
+                                    try {
+                                      DateTime wd = log['work_date'] is DateTime ? log['work_date'] : DateTime.parse(log['work_date'].toString());
+                                      workDateStr = DateFormat('MM/dd').format(wd);
+                                    } catch (e) {
+                                      workDateStr = log['work_date'].toString().split(' ').first;
+                                    }
+                                  }
 
                                   String rawModelName =
                                       log['model_name']?.toString() ?? "不明";
@@ -834,7 +1014,7 @@ class _DataViewTabState extends State<DataViewTab> {
                                           Expanded(
                                             flex: 2,
                                             child: Text(
-                                              workerName,
+                                              _currentMode == SearchMode.worker ? workDateStr : workerName,
                                               style: TextStyle(
                                                 fontSize: 20,
                                                 fontWeight: FontWeight.bold,
