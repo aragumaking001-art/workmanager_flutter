@@ -305,6 +305,7 @@ class DataProvider extends ChangeNotifier {
   List<Map<String, String>> get masterModelsList => _masterModelsList;
 
   bool _isLoading = false;
+  bool _isCheckingUpdates = false;
   String? _lastTimestamp;
   Timer? _refreshTimer;
 
@@ -563,6 +564,9 @@ class DataProvider extends ChangeNotifier {
   }
 
   Future<void> checkForUpdates() async {
+    if (_isCheckingUpdates) return;
+    _isCheckingUpdates = true;
+
     try {
       // 💡 【重要】通信準備も try の内側に入れる
       final conn = await MySQLConnection.createConnection(
@@ -599,6 +603,8 @@ class DataProvider extends ChangeNotifier {
         isOnline = false;
         notifyListeners();
       }
+    } finally {
+      _isCheckingUpdates = false;
     }
   }
 

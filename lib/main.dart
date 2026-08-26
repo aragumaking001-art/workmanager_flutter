@@ -55,8 +55,8 @@ void main() async {
       } else {
         if (myIp == "192.168.10.103") {
           currentMode = AppMode.administrator;
-        } else if (myIp == "192.168.10.150") {
-          currentMode = AppMode.administrator; // 192.168.10.150 も管理者モード
+        } else if (myIp == "192.168.10.150" || myIp == "192.168.10.151") {
+          currentMode = AppMode.administrator; // 150と151は管理者モード
         } else {
           currentMode = AppMode.manager;
         }
@@ -74,7 +74,7 @@ void main() async {
       await windowManager.ensureInitialized();
 
       // 💡 開発用PC(デバッグモード)ならウィンドウモードにする
-      bool isDevPC = kDebugMode || (myIp == "192.168.10.150");
+      bool isDevPC = kDebugMode || (myIp == "192.168.10.150") || (myIp == "192.168.10.151");
 
       windowManager.waitUntilReadyToShow(
         WindowOptions(

@@ -582,7 +582,7 @@ class WorkApp:
                     m_data = {
                         "name": str(row['model_name']).strip(),
                         "abbr": str(row.get('maker_abbr', '')).strip(),
-                        "maker": str(row.get('maker_name', '不明')).strip(),
+                        "maker": str(row.get('maker', '不明')).strip(),
                         "cat": str(row.get('category', '未分類')).strip(),
                         "work_type": str(row.get('work_type', '清掃')).strip(),
                         "std_qty": std_qty 
