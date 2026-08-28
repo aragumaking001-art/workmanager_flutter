@@ -646,7 +646,42 @@ class _DataEditTabState extends State<DataEditTab> {
                       Divider(color: provider.borderColor, height: 40),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8.0),
-                        child: Text("作業時間", style: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("作業時間", style: TextStyle(color: provider.subTextColor, fontSize: 18, fontWeight: FontWeight.bold)),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.more_time, size: 18),
+                                  label: const Text("入力忘れ用", style: TextStyle(fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: isWhite ? Colors.blue.shade600 : Colors.lightBlue,
+                                    foregroundColor: isWhite ? Colors.white : Colors.black,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                  onPressed: () {
+                                    _showForgotInputDialog(context, hoursCtrl, minutesCtrl, provider, isWhite);
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.timer_off, size: 18),
+                                  label: const Text("SV対応時間を引く", style: TextStyle(fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: isWhite ? Colors.orange.shade700 : Colors.orangeAccent,
+                                    foregroundColor: isWhite ? Colors.white : Colors.black,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                  onPressed: () {
+                                    _showSVTimeDialog(context, hoursCtrl, minutesCtrl, provider, isWhite);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                       Row(
                         children: [
@@ -824,6 +859,191 @@ class _DataEditTabState extends State<DataEditTab> {
           ],
         );
       }
+    );
+  }
+
+  void _showSVTimeDialog(BuildContext context, TextEditingController hoursCtrl, TextEditingController minutesCtrl, DataProvider provider, bool isWhite) {
+    TextEditingController svHoursCtrl = TextEditingController();
+    TextEditingController svMinutesCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: provider.currentCardColor,
+          title: Text("SV対応時間を引く", style: TextStyle(color: provider.mainTextColor, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("現在の作業時間から引く時間を入力してください。", style: TextStyle(color: provider.subTextColor, fontSize: 14)),
+              const SizedBox(height: 15),
+              Row(
+                children: [
+                  Expanded(child: _buildTimeField("時間", svHoursCtrl, provider, isWhite)),
+                  const SizedBox(width: 15),
+                  Expanded(child: _buildTimeField("分", svMinutesCtrl, provider, isWhite)),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text("キャンセル", style: TextStyle(color: provider.subTextColor, fontSize: 16)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isWhite ? const Color(0xFF00AA66) : const Color(0xFF00FFCC),
+                foregroundColor: isWhite ? Colors.white : Colors.black,
+              ),
+              onPressed: () {
+                int currentMins = (int.tryParse(hoursCtrl.text) ?? 0) * 60 + (int.tryParse(minutesCtrl.text) ?? 0);
+                int svMins = (int.tryParse(svHoursCtrl.text) ?? 0) * 60 + (int.tryParse(svMinutesCtrl.text) ?? 0);
+                
+                int newMins = currentMins - svMins;
+                if (newMins < 0) newMins = 0;
+
+                int h = newMins ~/ 60;
+                int m = newMins % 60;
+
+                hoursCtrl.text = h > 0 ? h.toString() : '';
+                minutesCtrl.text = m.toString();
+
+                Navigator.pop(dialogContext);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("作業時間からSV対応時間($svMins分)を引きました"),
+                    backgroundColor: isWhite ? Colors.teal.shade700 : Colors.teal,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: const Text("適用する", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showForgotInputDialog(BuildContext context, TextEditingController hoursCtrl, TextEditingController minutesCtrl, DataProvider provider, bool isWhite) {
+    TimeOfDay? startTime;
+    TimeOfDay? endTime;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: provider.currentCardColor,
+              title: Text("入力忘れ用 (時間計算)", style: TextStyle(color: provider.mainTextColor, fontWeight: FontWeight.bold)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("開始時間と終了時間を選択してください。", style: TextStyle(color: provider.subTextColor, fontSize: 14)),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("開始時間:", style: TextStyle(color: provider.mainTextColor, fontSize: 18)),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isWhite ? Colors.grey.shade200 : Colors.white10,
+                          foregroundColor: provider.mainTextColor,
+                        ),
+                        onPressed: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: startTime ?? const TimeOfDay(hour: 9, minute: 0),
+                            initialEntryMode: TimePickerEntryMode.dial,
+                          );
+                          if (picked != null) {
+                            setDialogState(() => startTime = picked);
+                          }
+                        },
+                        child: Text(startTime != null ? "${startTime!.hour.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}" : "選択", style: const TextStyle(fontSize: 18)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text("終了時間:", style: TextStyle(color: provider.mainTextColor, fontSize: 18)),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isWhite ? Colors.grey.shade200 : Colors.white10,
+                          foregroundColor: provider.mainTextColor,
+                        ),
+                        onPressed: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: endTime ?? const TimeOfDay(hour: 17, minute: 0),
+                            initialEntryMode: TimePickerEntryMode.dial,
+                          );
+                          if (picked != null) {
+                            setDialogState(() => endTime = picked);
+                          }
+                        },
+                        child: Text(endTime != null ? "${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}" : "選択", style: const TextStyle(fontSize: 18)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text("キャンセル", style: TextStyle(color: provider.subTextColor, fontSize: 16)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isWhite ? const Color(0xFF00AA66) : const Color(0xFF00FFCC),
+                    foregroundColor: isWhite ? Colors.white : Colors.black,
+                  ),
+                  onPressed: () {
+                    if (startTime == null || endTime == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("開始時間と終了時間の両方を選択してください")));
+                      return;
+                    }
+                    
+                    int startMins = startTime!.hour * 60 + startTime!.minute;
+                    int endMins = endTime!.hour * 60 + endTime!.minute;
+                    
+                    // 日またぎ対応
+                    if (endMins < startMins) {
+                      endMins += 24 * 60;
+                    }
+                    
+                    int diffMins = endMins - startMins;
+                    
+                    int h = diffMins ~/ 60;
+                    int m = diffMins % 60;
+                    
+                    hoursCtrl.text = h > 0 ? h.toString() : '';
+                    minutesCtrl.text = m.toString();
+                    
+                    Navigator.pop(dialogContext);
+                    
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("作業時間を反映しました ($diffMins分)"),
+                        backgroundColor: isWhite ? Colors.teal.shade700 : Colors.teal,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  child: const Text("反映する", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+              ],
+            );
+          }
+        );
+      },
     );
   }
 

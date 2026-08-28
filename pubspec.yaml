@@ -55,6 +55,9 @@ flutter:
     - assets/videos/splash_logo.mp4
     - assets/app_icon.png
     - assets/mascot.png
+    - assets/mascot_kansai.jpg
+    - assets/mascot_coach.jpg
+    - assets/mascot_butler.jpg
     - assets/frame_wood.png
     - assets/frame_iron.png
     - assets/frame_bronze.png

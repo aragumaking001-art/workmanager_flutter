@@ -1322,10 +1322,32 @@ class DataProvider extends ChangeNotifier {
         'UPDATE m_members SET ai_tone = :tone WHERE worker_id = :id',
         {'tone': tone, 'id': workerId},
       );
+
+      String tempMsg = "スタイルを変更しました！明日のレポートをお待ちください。";
+      if (tone == "関西弁") {
+        tempMsg = "おおきに！スタイル変更完了や！明日の作業分析レポートからワイが関西弁でビシバシ言うたるさかい、楽しみにな！";
+      } else if (tone == "熱血コーチ") {
+        tempMsg = "スタイル変更完了だ！お前の熱い想い、しかと受け取った！明日のレポートから俺がビシバシしごいてやるから覚悟しておけよ！";
+      } else if (tone == "執事") {
+        tempMsg = "かしこまりました。私、執事がスタイル変更を承りました。明日のレポートより、誠心誠意ご報告させていただきます。";
+      }
+
+      await conn.execute(
+        '''
+        UPDATE t_ai_reports 
+        SET report_content = :msg 
+        WHERE worker_id = :id 
+        ORDER BY target_date DESC 
+        LIMIT 1
+        ''',
+        {'msg': tempMsg, 'id': workerId},
+      );
+
       await conn.close();
       
       if (_workerStatsMap.containsKey(workerId)) {
         _workerStatsMap[workerId]!.aiTone = tone;
+        _workerStatsMap[workerId]!.aiReport = tempMsg;
         notifyListeners();
       }
     } catch (e) {

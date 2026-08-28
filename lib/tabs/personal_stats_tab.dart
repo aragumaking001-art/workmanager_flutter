@@ -826,6 +826,9 @@ class _PersonalStatsTabState extends State<PersonalStatsTab>
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.asset(
+                        worker.aiTone == "関西弁" ? 'assets/mascot_kansai.jpg' :
+                        worker.aiTone == "熱血コーチ" ? 'assets/mascot_coach.jpg' :
+                        worker.aiTone == "執事" ? 'assets/mascot_butler.jpg' :
                         'assets/mascot.png',
                         width: 180, // 120 -> 180
                         height: 180, // 120 -> 180

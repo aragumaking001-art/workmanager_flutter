@@ -42,11 +42,8 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
     _startDate = DateTime(now.year, now.month, 1);
     _endDate = DateTime(now.year, now.month + 1, 0); // 月末
     
-    // 💡 Kioskモード時はデフォルトで全期間表示にする（過去の実績もすべて表示）
-    if (widget.isKioskMode) {
-      _isAllTime = true;
-    }
-    
+    // Kioskモード時もデフォルトは当月表示とするため、_isAllTime の上書きを削除しました
+
     // Kioskモード時は初期ワーカーID（NFC IDなど）を名前に変換してセット
     if (widget.initialWorkerId != null) {
       // DataProviderのインスタンスをビルド前なので context.read または後で取得する
