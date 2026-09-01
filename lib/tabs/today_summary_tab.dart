@@ -26,13 +26,9 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
   DateTime _selectedDate = DateTime.now();
   List<ModelSummary> _customModels = [];
   bool _isFetchingCustom = false;
+  bool _isCustomDate = false; // 💡 カレンダーで過去を指定したかどうかのフラグ
 
-  bool get _isToday {
-    DateTime now = DateTime.now();
-    return _selectedDate.year == now.year &&
-        _selectedDate.month == now.month &&
-        _selectedDate.day == now.day;
-  }
+  bool get _isLiveMode => !_isCustomDate;
 
   @override
   void initState() {
@@ -450,13 +446,26 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
     );
 
     if (result != null) {
+      DateTime now = DateTime.now();
+      bool isSelectedToday = result.year == now.year &&
+          result.month == now.month &&
+          result.day == now.day;
+      
       setState(() {
         _selectedDate = result;
+        _isCustomDate = !isSelectedToday; // 今日を選んだ場合はLiveモードに戻す
       });
-      if (!_isToday) {
+      if (_isCustomDate) {
         _fetchCustomDateData(_selectedDate);
       }
     }
+  }
+
+  void _resetToToday() {
+    setState(() {
+      _selectedDate = DateTime.now();
+      _isCustomDate = false;
+    });
   }
 
   @override
@@ -464,7 +473,7 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
     final data = context.watch<DataProvider>();
     final isWhite = data.displayMode == DisplayMode.pureWhite;
 
-    if (data.isLoading && data.todayModels.isEmpty && _isToday) {
+    if (data.isLoading && data.todayModels.isEmpty && !_isCustomDate) {
       return Scaffold(
         backgroundColor: data.currentBgColor,
         body: Center(
@@ -492,14 +501,15 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
       );
     }
 
-    DateTime targetDate = _selectedDate;
+    // 💡 _isCustomDateでない（Liveモード）場合は、画面上の日付表記も「常に今の今日」にする
+    DateTime targetDate = _isCustomDate ? _selectedDate : DateTime.now();
     String todayStr = DateFormat('yyyy/MM/dd').format(targetDate);
     String dateDisplay = DateFormat('yyyy年 MM月 dd日').format(targetDate);
     List<String> weekdays = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"];
     String weekdayDisplay = weekdays[targetDate.weekday - 1];
 
     List<ModelSummary> models = List.from(
-      _isToday ? data.todayModels : _customModels,
+      !_isCustomDate ? data.todayModels : _customModels,
     );
 
     int totalAir = models.fold(0, (sum, item) => sum + item.air);
@@ -516,19 +526,19 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
     String cheerMsg;
     Color cheerColor;
     if (totalProg == 0) {
-      cheerMsg = _isToday ? "準備中$sfx" : "実績記録なし$sfx";
+      cheerMsg = !_isCustomDate ? "準備中$sfx" : "実績記録なし$sfx";
       cheerColor = data.subTextColor;
     } else if (totalProg < 0.3) {
-      cheerMsg = _isToday ? "まずは1台！ここから$sfx" : "スタートダッシュ$sfx";
+      cheerMsg = !_isCustomDate ? "まずは1台！ここから$sfx" : "スタートダッシュ$sfx";
       cheerColor = isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF);
     } else if (totalProg < 0.6) {
-      cheerMsg = _isToday ? "いいペース$sfx その調子$sfx" : "順調な推移$sfx";
+      cheerMsg = !_isCustomDate ? "いいペース$sfx その調子$sfx" : "順調な推移$sfx";
       cheerColor = isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC);
     } else if (totalProg < 0.9) {
-      cheerMsg = _isToday ? "スゴい$sfx 目標まであと少し$sfx" : "高い目標到達率$sfx";
+      cheerMsg = !_isCustomDate ? "スゴい$sfx 目標まであと少し$sfx" : "高い目標到達率$sfx";
       cheerColor = isWhite ? Colors.amber.shade800 : Colors.amber;
     } else {
-      cheerMsg = _isToday ? "爆速$sfx センター最強$sfx" : "最高の達成実績$sfx";
+      cheerMsg = !_isCustomDate ? "爆速$sfx センター最強$sfx" : "最高の達成実績$sfx";
       cheerColor = isWhite ? Colors.purple.shade700 : Colors.purpleAccent;
     }
 
@@ -557,7 +567,7 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
                               color: data.mainTextColor,
                             ),
                           ),
-                          if (!_isToday) ...[
+                          if (_isCustomDate) ...[
                             const SizedBox(width: 15),
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -607,7 +617,7 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
                   ),
                   Row(
                     children: [
-                      if (!_isToday) ...[
+                      if (!_isLiveMode) ...[
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: isWhite
@@ -639,11 +649,7 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _selectedDate = DateTime.now();
-                            });
-                          },
+                          onPressed: _resetToToday,
                         ),
                         const SizedBox(width: 15),
                       ],
@@ -864,7 +870,7 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
                                   ),
                                   const SizedBox(width: 10),
                                   Text(
-                                    _isToday ? "本日機種別 詳細内訳" : "指定日 機種別 詳細内訳",
+                                    _isLiveMode ? "本日機種別 詳細内訳" : "指定日 機種別 詳細内訳",
                                     style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,

@@ -166,6 +166,26 @@ def main(page: ft.Page):
             """)
             my_cur.execute("INSERT IGNORE INTO daily_targets (id, air_target, clean_target, swap_target) VALUES (1, 600, 1200, 50)")
 
+            # 💡 アクティブセッション(稼働状況)用テーブル
+            my_cur.execute("""
+                CREATE TABLE IF NOT EXISTS t_active_workers (
+                    worker_id VARCHAR(50) PRIMARY KEY,
+                    start_time DOUBLE,
+                    is_paused INT DEFAULT 0,
+                    paused_at DOUBLE DEFAULT 0,
+                    last_update DATETIME
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """)
+
+            # 💡 Flutterの自動更新検知用テーブル
+            my_cur.execute("""
+                CREATE TABLE IF NOT EXISTS data_update_tracker (
+                    id INT PRIMARY KEY,
+                    last_updated DATETIME
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            """)
+            my_cur.execute("INSERT IGNORE INTO data_update_tracker (id, last_updated) VALUES (1, NOW())")
+
             # 永続接続を使用するためcloseは呼ばない
             my_conn.commit()
             # my_conn.close()
@@ -310,6 +330,21 @@ def main(page: ft.Page):
                             my_conn.commit()
                         except: pass
                         print(f"🔄 MariaDB同期完了: {len(synced_ids)}件を送信しました")
+
+                # --- 💡 アクティブセッション(稼働状況)の同期 ---
+                try:
+                    sl_cur.execute("SELECT worker_id, start_time, is_paused, paused_at FROM active_sessions")
+                    active_rows = sl_cur.fetchall()
+                    if active_rows:
+                        replace_sql = """
+                            REPLACE INTO t_active_workers (worker_id, start_time, is_paused, paused_at, last_update)
+                            VALUES (%s, %s, %s, %s, NOW())
+                        """
+                        for r in active_rows:
+                            my_cur.execute(replace_sql, (r["worker_id"], r["start_time"], r["is_paused"], r["paused_at"]))
+                        my_conn.commit()
+                except Exception as ex:
+                    print(f"⚠️ アクティブセッション同期失敗: {ex}")
             except Exception as ex:
                 print(f"⚠️ 同期失敗（詳細）: {type(ex).__name__} - {ex}")
             finally:

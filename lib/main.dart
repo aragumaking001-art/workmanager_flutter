@@ -13,6 +13,7 @@ import 'tabs/database_settings_tab.dart';
 
 import 'tabs/summary_tab.dart';
 import 'tabs/today_summary_tab.dart';
+import 'tabs/seating_chart_tab.dart';
 import 'tabs/total_ranking_tab.dart';
 import 'tabs/data_edit_tab.dart';
 import 'tabs/data_view_tab.dart';
@@ -308,6 +309,13 @@ class _MainLayoutState extends State<MainLayout> {
         Icons.calendar_month,
         Colors.deepOrange,
         const ScheduleProgressTab(),
+      ),
+      _menuCard(
+        context,
+        "稼働状況",
+        Icons.people_alt_rounded,
+        Colors.greenAccent,
+        const SeatingChartTab(),
       ),
     ];
     List<Widget> page2BottomCards = [];

@@ -274,6 +274,24 @@ class WorkerRank {
   WorkerRank(this.id);
 }
 
+class ActiveWorker {
+  final String workerId;
+  final String workerName;
+  final DateTime startTime;
+  final bool isPaused;
+  final DateTime? pausedAt;
+  final String inferredTask;
+
+  ActiveWorker({
+    required this.workerId,
+    required this.workerName,
+    required this.startTime,
+    required this.isPaused,
+    this.pausedAt,
+    this.inferredTask = "清掃",
+  });
+}
+
 // ⭐ 画面の視認性と光反射を完全コントロールする表示トーン定義
 enum DisplayMode {
   pureWhite,  // 🤍 極限反射防止：クリア・ライトパーリーホワイト（蛍光灯の映り込みを完全消滅！）
@@ -297,6 +315,7 @@ class DataProvider extends ChangeNotifier {
   List<ModelSummary> _todayModels = [];
   List<ScheduleItem> _scheduleList = [];
   Map<String, ModelScheduleProgress> _scheduleProgressMap = {};
+  List<ActiveWorker> _activeWorkers = [];
 
   Map<String, WorkerStats> _workerStatsMap = {};
   
@@ -404,6 +423,7 @@ class DataProvider extends ChangeNotifier {
   List<ModelSummary> get todayModels => _todayModels;
   List<ScheduleItem> get scheduleList => _scheduleList;
   Map<String, ModelScheduleProgress> get scheduleProgressMap => _scheduleProgressMap;
+  List<ActiveWorker> get activeWorkers => _activeWorkers;
   Map<String, WorkerStats> get workerStatsMap => _workerStatsMap;
   bool get isLoading => _isLoading;
 
@@ -412,10 +432,18 @@ class DataProvider extends ChangeNotifier {
     _rankEndDate = end;
     fetchAndAnalyze(silent: false);
   }
+  int _lastCheckedDay = DateTime.now().day; // 日付またぎリセット用
 
   void startAutoRefresh() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      int currentDay = DateTime.now().day;
+      if (_lastCheckedDay != currentDay) {
+        _lastCheckedDay = currentDay;
+        // 日付が変わった瞬間（深夜0時0分0秒〜5秒以内）にリフレッシュを強制実行
+        fetchAndAnalyze(silent: true);
+      }
+      
       checkForUpdates();
     });
   }
@@ -1035,7 +1063,8 @@ class DataProvider extends ChangeNotifier {
           SELECT 
             model_name, 
             IFNULL(maker_abbr, '') AS maker_name, 
-            MIN(sort_order) AS sort_id
+            MIN(sort_order) AS sort_id,
+            MAX(category) AS category
           FROM m_models
           GROUP BY model_name, maker_name
           ORDER BY sort_id ASC
@@ -1048,11 +1077,85 @@ class DataProvider extends ChangeNotifier {
             'model_name': data['model_name']?.toString() ?? '',
             'maker_name': data['maker_name']?.toString() ?? '',
             'csv_id': data['sort_id']?.toString() ?? '9999',
+            'category': data['category']?.toString() ?? '',
           });
         }
         _masterModelsList = tempMasterModels;
       } catch (e) {
         print("🚨 マスター全機種取得エラー: $e");
+      }
+
+      // --- 🪑 8. 稼働状況（Active Workers）の取得 ---
+      try {
+        var activeResults = await conn.execute('''
+          SELECT a.worker_id, m.worker_name, a.start_time, a.is_paused, a.paused_at
+          FROM t_active_workers a
+          LEFT JOIN m_members m ON a.worker_id = m.worker_id
+        ''');
+
+        // 直近1週間のうち、各作業者の「一番最後（最新）の作業ログ」を取得して推測する
+        var taskCountResults = await conn.execute('''
+          SELECT worker_id, 
+                 IFNULL(air_clean_qty, 0) as air_sum,
+                 IFNULL(clean_qty, 0) as clean_sum,
+                 IFNULL(swap_qty, 0) as swap_sum
+          FROM unit_cleaning_logs
+          WHERE id IN (
+            SELECT MAX(id)
+            FROM unit_cleaning_logs
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            GROUP BY worker_id
+          )
+        ''');
+
+        Map<String, String> workerInferredTask = {};
+        for (var row in taskCountResults.rows) {
+          var tData = row.assoc();
+          String wId = tData['worker_id'] ?? '';
+          double air = double.tryParse(tData['air_sum'] ?? '0') ?? 0;
+          double clean = double.tryParse(tData['clean_sum'] ?? '0') ?? 0;
+          double swap = double.tryParse(tData['swap_sum'] ?? '0') ?? 0;
+
+          String bestTask = "清掃";
+          if (air > clean && air >= swap) {
+            bestTask = "エアー";
+          } else if (swap > clean && swap > air) {
+            bestTask = "筐体交換";
+          }
+          workerInferredTask[wId] = bestTask;
+        }
+
+        List<ActiveWorker> tempActiveWorkers = [];
+        for (var row in activeResults.rows) {
+          var data = row.assoc();
+          String wId = data['worker_id'] ?? '';
+          double startTs = double.tryParse(data['start_time'] ?? '0') ?? 0;
+          DateTime startTime = DateTime.fromMillisecondsSinceEpoch((startTs * 1000).toInt());
+          bool isPaused = (data['is_paused'] ?? '0') == '1';
+          
+          DateTime? pausedAt;
+          if (isPaused) {
+            double pausedTs = double.tryParse(data['paused_at'] ?? '0') ?? 0;
+            if (pausedTs > 0) {
+              pausedAt = DateTime.fromMillisecondsSinceEpoch((pausedTs * 1000).toInt());
+            }
+          }
+
+          tempActiveWorkers.add(ActiveWorker(
+            workerId: wId,
+            workerName: data['worker_name'] ?? (wId.isNotEmpty ? wId : '不明'),
+            startTime: startTime,
+            isPaused: isPaused,
+            pausedAt: pausedAt,
+            inferredTask: workerInferredTask[wId] ?? "清掃",
+          ));
+        }
+
+        // 開始時刻が新しい順に並べる
+        tempActiveWorkers.sort((a, b) => b.startTime.compareTo(a.startTime));
+        _activeWorkers = tempActiveWorkers;
+      } catch (e) {
+        print("🚨 稼働状況データ取得エラー: $e");
       }
 
       _isLoading = false;

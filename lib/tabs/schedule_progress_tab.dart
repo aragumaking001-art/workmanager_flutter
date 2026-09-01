@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/data_provider.dart';
+import 'short_term_schedule_tab.dart';
 
 class ScheduleProgressTab extends StatefulWidget {
   const ScheduleProgressTab({Key? key}) : super(key: key);
@@ -453,6 +454,16 @@ class _ScheduleProgressTabState extends State<ScheduleProgressTab> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
+          TextButton.icon(
+            icon: Icon(Icons.flash_on, color: dp.mainTextColor),
+            label: Text("直近スケジュール", style: TextStyle(color: dp.mainTextColor)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ShortTermScheduleTab()),
+              );
+            },
+          ),
           if (_isBuilding)
             const Center(
               child: SizedBox(
