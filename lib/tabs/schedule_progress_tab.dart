@@ -1504,6 +1504,33 @@ class _ScheduleProgressTabState extends State<ScheduleProgressTab> {
               child: const Text("キャンセル"),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isWhite ? Colors.green.shade600 : Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                int? newPlan = int.tryParse(planController.text);
+                if (newPlan != null) {
+                  final dp = Provider.of<DataProvider>(context, listen: false);
+                  await dp.updateSchedule(
+                    model,
+                    maker,
+                    targetDate,
+                    newPlan,
+                    newPlan,
+                  );
+                  if (mounted) {
+                    setState(() {
+                      _isBuilding = true;
+                    });
+                    _buildTableWidgets();
+                  }
+                }
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text("完了"),
+            ),
+            ElevatedButton(
               onPressed: () async {
                 int? newPlan = int.tryParse(planController.text);
                 int? newActual = int.tryParse(actualController.text);

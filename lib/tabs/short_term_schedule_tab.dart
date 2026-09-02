@@ -417,6 +417,19 @@ class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
               child: const Text("キャンセル"),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isWhite ? Colors.green.shade600 : Colors.green,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                int finalPlan = int.tryParse(planController.text) ?? 0;
+                await dp.updateSchedule(model, maker, targetDate, finalPlan, finalPlan);
+                if (mounted) setState(() {});
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text("完了"),
+            ),
+            ElevatedButton(
               onPressed: () async {
                 int finalActual = int.tryParse(actualController.text) ?? 0;
                 int finalPlan = int.tryParse(planController.text) ?? 0;

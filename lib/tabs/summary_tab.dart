@@ -255,15 +255,19 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                     child: ListView(
                       children: (() {
                         final sortedList = _modelDataMap.values.toList()
-                          ..sort((a, b) => a.sortId.compareTo(b.sortId));
+                          ..sort((a, b) {
+                            int cmp = a.sortId.compareTo(b.sortId);
+                            if (cmp != 0) return cmp;
+                            return a.name.compareTo(b.name);
+                          });
                           
                         return sortedList.map((summary) {
                           bool isModelSelected = currentModel?.name == summary.name;
 
                           bool overallHasWarning = 
-                              (summary.air > 0 && summary.airSpeed < summary.stdAir) ||
-                              (summary.clean > 0 && summary.cleanSpeed < summary.stdClean) ||
-                              (summary.swap > 0 && summary.swapSpeed < summary.stdSwap);
+                              (summary.air > 0 && summary.airSpeed < (summary.stdAir * 0.7)) ||
+                              (summary.clean > 0 && summary.cleanSpeed < (summary.stdClean * 0.7)) ||
+                              (summary.swap > 0 && summary.swapSpeed < (summary.stdSwap * 0.7));
 
                           Color baseColor = summary.totalFinished > 0 ? (isWhite ? Colors.green.shade100 : Colors.green.shade900) : (isWhite ? Colors.grey.shade200 : Colors.blueGrey.shade900);
                           
@@ -336,21 +340,55 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                                     tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                                     leading: leadingIcon,
                                     title: titleText,
-                                    children: summary.makerDetailsMap.values.map((md) {
-                                      bool isMakerSelected = isModelSelected && currentMaker?.name == md.name;
-                                      
-                                      String abbr = md.abbr; 
-                                      String displayName = abbr.isNotEmpty ? abbr : md.name;
-                                      if (displayName.isEmpty) displayName = "不明";
+                                    children: (() {
+                                      var makers = summary.makerDetailsMap.values.toList();
+                                      makers.sort((a, b) {
+                                        int getMakerOrder(String model, String maker) {
+                                          if (model.contains('PR-600')) {
+                                            if (maker == 'M/M') return 1;
+                                            if (maker == 'H/O') return 2;
+                                            if (maker == 'M/O') return 3;
+                                          }
+
+                                          if (maker == 'M') return 1;
+                                          if (maker == 'FA') return 2;
+                                          if (maker == 'O') return 3;
+
+                                          if (maker == 'M/M') return 4;
+                                          if (maker == 'M/O') return 5;
+                                          if (maker == 'F/M') return 6;
+                                          if (maker == 'F/O') return 7;
+                                          if (maker == 'H/M') return 8;
+                                          if (maker == 'H/O') return 9;
+                                          
+                                          return 99;
+                                        }
+
+                                        String abbrA = a.abbr.isNotEmpty ? a.abbr : a.name;
+                                        String abbrB = b.abbr.isNotEmpty ? b.abbr : b.name;
+
+                                        int orderA = getMakerOrder(summary.name, abbrA);
+                                        int orderB = getMakerOrder(summary.name, abbrB);
+                                        
+                                        int cmp = orderA.compareTo(orderB);
+                                        if (cmp != 0) return cmp;
+                                        return abbrA.compareTo(abbrB);
+                                      });
+                                      return makers.map((md) {
+                                        bool isMakerSelected = isModelSelected && currentMaker?.name == md.name;
+                                        
+                                        String abbr = md.abbr; 
+                                        String displayName = abbr.isNotEmpty ? abbr : md.name;
+                                        if (displayName.isEmpty) displayName = "不明";
 
                                       double makerAirSpeed = md.airWorkMinutes > 0 ? (md.air / (md.airWorkMinutes / 60)) : 0;
                                       double makerCleanSpeed = md.cleanWorkMinutes > 0 ? (md.clean / (md.cleanWorkMinutes / 60)) : 0;
                                       double makerSwapSpeed = md.swapWorkMinutes > 0 ? (md.swap / (md.swapWorkMinutes / 60)) : 0;
 
                                       bool makerHasWarning = 
-                                          (md.air > 0 && makerAirSpeed < summary.stdAir) ||
-                                          (md.clean > 0 && makerCleanSpeed < summary.stdClean) ||
-                                          (md.swap > 0 && makerSwapSpeed < summary.stdSwap);
+                                          (md.air > 0 && makerAirSpeed < (summary.stdAir * 0.7)) ||
+                                          (md.clean > 0 && makerCleanSpeed < (summary.stdClean * 0.7)) ||
+                                          (md.swap > 0 && makerSwapSpeed < (summary.stdSwap * 0.7));
 
                                       return InkWell(
                                         onTap: () {
@@ -417,7 +455,8 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                                           ),
                                         ),
                                       );
-                                    }).toList(),
+                                    }).toList();
+                                  })(),
                                   ),
                                 )
                               : ListTile(
@@ -756,6 +795,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
   Widget _speedCard(String label, double actual, double std, Color color, IconData icon, bool isWhite, DataProvider provider) {
     final bool isZero = actual <= 0.0;
     final bool isEfficient = actual >= std;
+    final bool isAcceptable = !isZero && !isEfficient && actual >= (std * 0.7);
 
     Color statusColor;
     Color borderColor;
@@ -769,6 +809,10 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
       statusColor = isWhite ? const Color(0xFF007A3D) : const Color(0xFF00E676);
       borderColor = statusColor.withOpacity(isWhite ? 0.6 : 0.4);
       gradientColors = isWhite ? [const Color(0xFFE8F5E9), Colors.white] : [const Color(0xFF0D3211), const Color(0xFF051506)];
+    } else if (isAcceptable) {
+      statusColor = isWhite ? Colors.orange.shade700 : Colors.orangeAccent;
+      borderColor = statusColor.withOpacity(isWhite ? 0.6 : 0.4);
+      gradientColors = isWhite ? [const Color(0xFFFFF3E0), Colors.white] : [const Color(0xFF332000), const Color(0xFF1A1000)];
     } else {
       statusColor = isWhite ? const Color(0xFFD32F2F) : const Color(0xFFFF5252);
       borderColor = statusColor.withOpacity(isWhite ? 0.6 : 0.4);
@@ -823,7 +867,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                 children: [
                   if (!isZero) ...[
                     Icon(
-                      isEfficient ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                      isEfficient ? Icons.arrow_upward_rounded : (isAcceptable ? Icons.trending_flat_rounded : Icons.arrow_downward_rounded),
                       color: statusColor,
                       size: 36,
                     ),
@@ -877,7 +921,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                     if (!isZero) ...[
                       const SizedBox(width: 8),
                       Text(
-                        "${isEfficient ? '▲ +' : '▼ '}${(actual - std).toStringAsFixed(1)}",
+                        "${isEfficient ? '▲ +' : (isAcceptable ? '▶ ' : '▼ ')}${(actual - std).toStringAsFixed(1)}",
                         style: TextStyle(
                           color: statusColor,
                           fontSize: 15,
