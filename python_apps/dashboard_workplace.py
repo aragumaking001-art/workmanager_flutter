@@ -336,13 +336,21 @@ def main(page: ft.Page):
                     sl_cur.execute("SELECT worker_id, start_time, is_paused, paused_at FROM active_sessions")
                     active_rows = sl_cur.fetchall()
                     if active_rows:
+                        active_ids = [r["worker_id"] for r in active_rows]
+                        format_strings = ','.join(['%s'] * len(active_ids))
+                        delete_sql = f"DELETE FROM t_active_workers WHERE worker_id NOT IN ({format_strings})"
+                        my_cur.execute(delete_sql, tuple(active_ids))
+                        
                         replace_sql = """
                             REPLACE INTO t_active_workers (worker_id, start_time, is_paused, paused_at, last_update)
-                            VALUES (%s, %s, %s, %s, NOW())
+                            VALUES (%s, %s, %s, %s, NULL)
                         """
                         for r in active_rows:
                             my_cur.execute(replace_sql, (r["worker_id"], r["start_time"], r["is_paused"], r["paused_at"]))
-                        my_conn.commit()
+                    else:
+                        my_cur.execute("DELETE FROM t_active_workers")
+                        
+                    my_conn.commit()
                 except Exception as ex:
                     print(f"⚠️ アクティブセッション同期失敗: {ex}")
             except Exception as ex:
@@ -708,4 +716,4 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.app(target=main, assets_dir="assets", web_renderer=ft.WebRenderer.CANVAS_KIT)
-    os._exit(0)  # Fletプロセス終了後にバックグラウンドタスクやポートを確実に解放
+    os._exit(0)  # Fletプロセス終了後にバックグラウンドタスクやポートを確実に解放

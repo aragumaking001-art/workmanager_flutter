@@ -26,7 +26,7 @@ pip install pyinstaller
 # exeのビルドスクリプトを実行
 build_python.bat
 ```
-ビルド完了後、`dist\` フォルダ内に `dashboard_workplace.exe` および `work_app.exe` が生成されます。
+ビルド完了後、`python_apps/dist/` フォルダ内に `dashboard_workplace` フォルダおよび `work_app` フォルダ（またはexeファイル）が生成されます。
 
 ---
 

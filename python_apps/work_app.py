@@ -17,7 +17,7 @@ import threading
 
 # --- 効果音の設定 ---
 # ランダム再生をオフにして、常に success.wav だけを鳴らす場合はここを False に変更します
-ENABLE_RANDOM_SUCCESS_SOUND = True
+ENABLE_RANDOM_SUCCESS_SOUND = False
 
 
 
@@ -803,7 +803,7 @@ class WorkApp:
     def get_timer_status_custom(self, start_ts, end_ts):
         """指定された時刻までの実稼働時間を計算（休憩を除く）"""
         now_ts = end_ts
-        breaks = [(10, 0, 5), (12, 0, 45), (15, 0, 10), (18, 30, 10)]
+        breaks = [(11, 55, 50), (15, 0, 10), (18, 30, 10)]
         start_dt, now_dt = datetime.fromtimestamp(start_ts), datetime.fromtimestamp(now_ts)
         today, total_break_sec, is_breaking = start_dt.date(), 0, False
         
@@ -967,7 +967,7 @@ class WorkApp:
     def get_timer_status(self, start_ts):
         """現在の実稼働秒数と休憩中フラグを返す"""
         now_ts = time.time()
-        breaks = [(10, 0, 5), (12, 0, 45), (15, 0, 10), (18, 30, 10)]
+        breaks = [(11, 55, 50), (15, 0, 10), (18, 30, 10)]
         start_dt, now_dt = datetime.fromtimestamp(start_ts), datetime.fromtimestamp(now_ts)
         today, total_break_sec, is_breaking = start_dt.date(), 0, False
         for h, m, duration in breaks:
@@ -1284,14 +1284,23 @@ class WorkApp:
 
         try:
             sound_name = "success.wav"
-            if globals().get('ENABLE_RANDOM_SUCCESS_SOUND', True):
-                r = random.random()
-                if r < 0.7:
-                    sound_name = "success.wav"
-                elif r < 0.9:
-                    sound_name = "success2.wav"
-                else:
-                    sound_name = "success3.wav"
+            worker_id = self.my_worker_id if hasattr(self, 'my_worker_id') else ""
+            worker_sound_path = os.path.join("assets", f"{worker_id}.wav")
+            worker_a_sound_path = os.path.join("assets", f"{worker_id}_a.wav")
+            
+            if worker_id and os.path.exists(worker_sound_path):
+                sound_name = f"{worker_id}.wav"
+                if os.path.exists(worker_a_sound_path) and random.random() < 0.1:
+                    sound_name = f"{worker_id}_a.wav"
+            else:
+                if globals().get('ENABLE_RANDOM_SUCCESS_SOUND', True):
+                    r = random.random()
+                    if r < 0.7:
+                        sound_name = "success.wav"
+                    elif r < 0.9:
+                        sound_name = "success2.wav"
+                    else:
+                        sound_name = "success3.wav"
             
             sound_path = os.path.join("assets", sound_name)
             winsound.PlaySound(sound_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
