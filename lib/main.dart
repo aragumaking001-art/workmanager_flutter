@@ -1,8 +1,8 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -21,8 +21,8 @@ import 'tabs/personal_stats_tab.dart';
 import 'tabs/goal_list_tab.dart';
 import 'tabs/settings_tab.dart';
 import 'tabs/schedule_progress_tab.dart';
-import 'tabs/kiosk_screen.dart';
 import 'providers/kiosk_provider.dart';
+import 'widgets/app_background_wrapper.dart';
 
 // 💡 動作モードの定義
 enum AppMode { administrator, kiosk, manager }
@@ -50,14 +50,16 @@ void main() async {
         }
       }
 
-      // 💡 IPアドレスによるモード判定ロジック
-      if (myIp == "192.168.10.102") {
+      // 💡 IPアドレスによるモード判定ロジック（※UI編集中・デバッグ時は管理者モードを優先）
+      if (kDebugMode) {
+        currentMode = AppMode.administrator;
+      } else if (myIp == "192.168.10.102") {
         currentMode = AppMode.kiosk;
       } else {
         if (myIp == "192.168.10.103") {
           currentMode = AppMode.administrator;
-        } else if (myIp == "192.168.10.150" || myIp == "192.168.10.151") {
-          currentMode = AppMode.administrator; // 150と151は管理者モード
+        } else if (myIp == "192.168.10.150" || myIp == "192.168.10.151" || myIp == "192.168.10.152") {
+          currentMode = AppMode.administrator; // 150, 151, 152は管理者モード
         } else {
           currentMode = AppMode.manager;
         }
@@ -75,7 +77,7 @@ void main() async {
       await windowManager.ensureInitialized();
 
       // 💡 開発用PC(デバッグモード)ならウィンドウモードにする
-      bool isDevPC = kDebugMode || (myIp == "192.168.10.150") || (myIp == "192.168.10.151");
+      bool isDevPC = kDebugMode || (myIp == "192.168.10.150") || (myIp == "192.168.10.151") || (myIp == "192.168.10.152");
 
       windowManager.waitUntilReadyToShow(
         WindowOptions(
@@ -243,6 +245,8 @@ class _MainLayoutState extends State<MainLayout> {
           Icons.person_search_rounded,
           Colors.orangeAccent,
           const PersonalStatsTab(isKioskMode: false),
+          imagePath: 'assets/menu_personal_stats.jpg',
+          entranceIndex: 4,
         ),
       );
       page1BottomCards.add(
@@ -252,6 +256,8 @@ class _MainLayoutState extends State<MainLayout> {
           Icons.emoji_events_rounded,
           Colors.amber,
           const PersonalProductivityPage(),
+          imagePath: 'assets/menu_productivity.jpg',
+          entranceIndex: 5,
         ),
       );
     }
@@ -262,6 +268,8 @@ class _MainLayoutState extends State<MainLayout> {
         Icons.edit_note_rounded,
         Colors.teal,
         DataEditTab(isAdmin: widget.appMode == AppMode.administrator),
+        imagePath: 'assets/menu_data_edit.jpg',
+        entranceIndex: 6,
       ),
     );
     page1BottomCards.add(
@@ -271,6 +279,8 @@ class _MainLayoutState extends State<MainLayout> {
         Icons.find_in_page_rounded,
         Colors.indigoAccent,
         const DataViewTab(),
+        imagePath: 'assets/menu_data_view.jpg',
+        entranceIndex: 7,
       ),
     );
 
@@ -293,22 +303,19 @@ class _MainLayoutState extends State<MainLayout> {
         context,
         "作業標準台数",
         Icons.flag_circle,
-        Colors.pinkAccent,
+        Colors.amber,
         const GoalListTab(),
+        imagePath: 'assets/menu_goal_list.jpg',
+        entranceIndex: 0,
       ),
-      _menuCard(
-        context,
-        "画面・表示設定",
-        Icons.settings_display_rounded,
-        const Color(0xFF00CCFF),
-        const SettingsTab(),
-      ), // ⭐ 反射低減と純黒トーンを心ゆくまで自由に選択できる専用設定カード！
       _menuCard(
         context,
         "清掃スケジュール",
         Icons.calendar_month,
-        Colors.deepOrange,
+        const Color(0xFF00CCFF),
         const ScheduleProgressTab(),
+        imagePath: 'assets/menu_schedule.jpg',
+        entranceIndex: 1,
       ),
       _menuCard(
         context,
@@ -316,20 +323,37 @@ class _MainLayoutState extends State<MainLayout> {
         Icons.people_alt_rounded,
         Colors.greenAccent,
         const SeatingChartTab(),
+        imagePath: 'assets/menu_seating_chart.jpg',
+        entranceIndex: 2,
       ),
     ];
     List<Widget> page2BottomCards = [];
+    int bottomEntranceIndex = 3;
     if (widget.appMode == AppMode.administrator) {
       page2BottomCards.add(
         _menuCard(
           context,
-          "データベース\n運用設定",
+          "データベース運用設定",
           Icons.storage_rounded,
           Colors.purpleAccent,
           const DatabaseSettingsTab(),
+          imagePath: 'assets/menu_database_settings.jpg',
+          entranceIndex: bottomEntranceIndex++,
         ),
       );
     }
+    // 💡 画面・表示設定（データベース運用設定の右に配置）
+    page2BottomCards.add(
+      _menuCard(
+        context,
+        "画面・表示設定",
+        Icons.settings_display_rounded,
+        const Color(0xFF00CCFF),
+        const SettingsTab(),
+        imagePath: 'assets/menu_display_settings.jpg',
+        entranceIndex: bottomEntranceIndex++,
+      ), // ⭐ 反射低減と純黒トーンを心ゆくまで自由に選択できる専用設定カード！
+    );
 
     List<Widget> page2TopRowChildren = [];
     List<Widget> page2BottomRowChildren = [];
@@ -353,12 +377,17 @@ class _MainLayoutState extends State<MainLayout> {
     }
 
     final dp = context.watch<DataProvider>();
+    final isWhiteMode = dp.displayMode == DisplayMode.pureWhite;
 
-    return Scaffold(
-      backgroundColor: dp.currentBgColor,
-      appBar: AppBar(
-        backgroundColor: dp.currentCardColor,
-        elevation: dp.displayMode == DisplayMode.pureWhite ? 2 : 0,
+    return AppBackgroundWrapper(
+      blurSigma: 8.0,
+      whiteAlpha: 0.70,
+      darkAlpha: 0.60,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: dp.currentCardColor.withValues(alpha: 0.5),
+            elevation: dp.displayMode == DisplayMode.pureWhite ? 2 : 0,
         title: Text(
           widget.appMode == AppMode.administrator
               ? "和気センター 統合ダッシュボード [管理者]"
@@ -426,16 +455,10 @@ class _MainLayoutState extends State<MainLayout> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        "作業実績・データ管理",
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF00CCFF),
-                        ),
-                      ),
+                    _buildSectionHeader(
+                      "作業実績・データ管理",
+                      const Color(0xFF00E5FF),
+                      Icons.data_usage_rounded,
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -444,46 +467,48 @@ class _MainLayoutState extends State<MainLayout> {
                           context,
                           "4F 筐体清掃",
                           Icons.cleaning_services_rounded,
-                          const Color(0xFF00CCFF),
+                          const Color(0xFF00E5FF),
                           const TabPageLayout(),
+                          imagePath: 'assets/menu_unit_cleaning.jpg',
+                          entranceIndex: 0,
                         ),
                         const SizedBox(width: 20),
                         _menuCard(
                           context,
                           "データ修正",
                           Icons.edit_note_rounded,
-                          Colors.teal,
+                          const Color(0xFF00E676),
                           DataEditTab(isAdmin: false),
+                          imagePath: 'assets/menu_data_edit.jpg',
+                          entranceIndex: 1,
                         ),
                         const SizedBox(width: 20),
                         _menuCard(
                           context,
                           "データ確認",
                           Icons.find_in_page_rounded,
-                          Colors.indigoAccent,
+                          const Color(0xFF2979FF),
                           const DataViewTab(),
+                          imagePath: 'assets/menu_data_view.jpg',
+                          entranceIndex: 2,
                         ),
                         const SizedBox(width: 20),
                         _menuCard(
                           context,
                           "作業標準台数",
                           Icons.flag_circle,
-                          Colors.pinkAccent,
+                          const Color(0xFFFFB300),
                           const GoalListTab(),
+                          imagePath: 'assets/menu_goal_list.jpg',
+                          entranceIndex: 3,
                         ),
                       ],
                     ),
                     const SizedBox(height: 40),
-                    const FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        "スケジュール管理",
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.pinkAccent,
-                        ),
-                      ),
+                    _buildSectionHeader(
+                      "スケジュール管理",
+                      const Color(0xFFFF9100),
+                      Icons.edit_calendar_rounded,
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -492,8 +517,10 @@ class _MainLayoutState extends State<MainLayout> {
                           context,
                           "清掃スケジュール",
                           Icons.calendar_month,
-                          Colors.deepOrange,
+                          const Color(0xFFFF9100),
                           const ScheduleProgressTab(),
+                          imagePath: 'assets/menu_schedule.jpg',
+                          entranceIndex: 4,
                         ),
                         const SizedBox(width: 20),
                         const Expanded(child: SizedBox.shrink()),
@@ -507,157 +534,309 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ),
             )
-          : Column(
+          : Stack(
               children: [
-                Expanded(
-                  child: PageView(
-                    controller: _pageController,
-                    onPageChanged: (index) {
-                      setState(() => _currentPage = index);
-                    },
-                    children: [
-                      // ページ1
-                      SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 40.0,
-                            vertical: 30.0,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  "フロア実績 (1F - 4F)",
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF00CCFF),
-                                  ),
-                                ),
+                Column(
+                  children: [
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          setState(() => _currentPage = index);
+                        },
+                        children: [
+                          // ページ1
+                          SingleChildScrollView(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 40.0,
+                                vertical: 24.0,
                               ),
-                              const SizedBox(height: 20),
-                              Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _menuCard(
-                                    context,
-                                    "1F 開梱・登録",
-                                    Icons.unarchive_rounded,
-                                    Colors.blueGrey,
-                                    null,
-                                  ),
-                                  const SizedBox(width: 20),
-                                  _menuCard(
-                                    context,
-                                    "2F 梱包・アダプタ",
-                                    Icons.inventory_2_rounded,
-                                    Colors.blueGrey,
-                                    null,
-                                  ),
-                                  const SizedBox(width: 20),
-                                  _menuCard(
-                                    context,
-                                    "3F 試験・検品",
-                                    Icons.fact_check_rounded,
-                                    Colors.blueGrey,
-                                    null,
-                                  ),
-                                  const SizedBox(width: 20),
-                                  _menuCard(
-                                    context,
-                                    "4F 筐体清掃",
-                                    Icons.cleaning_services_rounded,
+                                  _buildSectionHeader(
+                                    "フロア実績 (1F - 4F)",
                                     const Color(0xFF00CCFF),
-                                    const TabPageLayout(),
+                                    Icons.business_rounded,
                                   ),
+                                  const SizedBox(height: 20),
+                                  Row(
+                                    children: [
+                                      _menuCard(
+                                        context,
+                                        "1F 開梱・登録",
+                                        Icons.unarchive_rounded,
+                                        Colors.blueGrey,
+                                        null,
+                                        entranceIndex: 0,
+                                      ),
+                                      const SizedBox(width: 20),
+                                      _menuCard(
+                                        context,
+                                        "2F 梱包・アダプタ",
+                                        Icons.inventory_2_rounded,
+                                        Colors.blueGrey,
+                                        null,
+                                        entranceIndex: 1,
+                                      ),
+                                      const SizedBox(width: 20),
+                                      _menuCard(
+                                        context,
+                                        "3F 試験・検品",
+                                        Icons.fact_check_rounded,
+                                        Colors.blueGrey,
+                                        null,
+                                        entranceIndex: 2,
+                                      ),
+                                      const SizedBox(width: 20),
+                                      _menuCard(
+                                        context,
+                                        "4F 筐体清掃",
+                                        Icons.cleaning_services_rounded,
+                                        const Color(0xFF00CCFF),
+                                        const TabPageLayout(),
+                                        imagePath: 'assets/menu_unit_cleaning.jpg',
+                                        entranceIndex: 3,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 36),
+                                  _buildSectionHeader(
+                                    "分析・管理メニュー",
+                                    Colors.orangeAccent,
+                                    Icons.analytics_rounded,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Row(children: page1BottomRowChildren),
                                 ],
                               ),
-                              const SizedBox(height: 40),
-                              const FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  "分析・管理メニュー",
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.orangeAccent,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Row(children: page1BottomRowChildren),
-                            ],
+                            ),
                           ),
-                        ),
+                          // ページ2
+                          SingleChildScrollView(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 40.0,
+                                vertical: 24.0,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildSectionHeader(
+                                    "目標・拡張機能",
+                                    Colors.pinkAccent,
+                                    Icons.extension_rounded,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Row(children: page2TopRowChildren),
+                                  const SizedBox(height: 36),
+                                  _buildSectionHeader(
+                                    "追加機能枠",
+                                    Colors.grey,
+                                    Icons.add_circle_outline_rounded,
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Row(children: page2BottomRowChildren),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      // ページ2
-                      SingleChildScrollView(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 40.0,
-                            vertical: 30.0,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  "目標・拡張機能",
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.pinkAccent,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Row(children: page2TopRowChildren),
-                              const SizedBox(height: 40),
-                              const FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  "追加機能枠",
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Row(children: page2BottomRowChildren),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(2, (index) {
-                      bool isActive = _currentPage == index;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.symmetric(horizontal: 5.0),
-                        height: 12.0,
-                        width: isActive ? 30.0 : 12.0,
+                    ),
+                    // 💡 ページ表示バッジ（現在ページのテキスト ＋ インジケーター）
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                         decoration: BoxDecoration(
-                          color: isActive
-                              ? const Color(0xFF00CCFF)
-                              : Colors.white24,
-                          borderRadius: BorderRadius.circular(6.0),
+                          color: isWhiteMode
+                              ? Colors.white.withValues(alpha: 0.85)
+                              : const Color(0xFF0F172A).withValues(alpha: 0.75),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isWhiteMode
+                                ? Colors.black.withValues(alpha: 0.08)
+                                : Colors.white.withValues(alpha: 0.12),
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isWhiteMode ? 0.05 : 0.25),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      );
-                    }),
-                  ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: List.generate(2, (index) {
+                                bool isActive = _currentPage == index;
+                                final dotColor = isActive
+                                    ? (index == 0
+                                        ? (isWhiteMode ? const Color(0xFF006688) : const Color(0xFF00CCFF))
+                                        : (isWhiteMode ? const Color(0xFFC2185B) : Colors.pinkAccent))
+                                    : (isWhiteMode ? Colors.black26 : Colors.white24);
+                                return AnimatedContainer(
+                                  duration: const Duration(milliseconds: 300),
+                                  margin: const EdgeInsets.symmetric(horizontal: 3.5),
+                                  height: 7.0,
+                                  width: isActive ? 18.0 : 7.0,
+                                  decoration: BoxDecoration(
+                                    color: dotColor,
+                                    borderRadius: BorderRadius.circular(3.5),
+                                  ),
+                                );
+                              }),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _currentPage == 0
+                                  ? "1 / 2　フロア実績・分析"
+                                  : "2 / 2　目標・拡張機能",
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: _currentPage == 0
+                                    ? (isWhiteMode ? const Color(0xFF006688) : const Color(0xFF00CCFF))
+                                    : (isWhiteMode ? const Color(0xFFC2185B) : Colors.pinkAccent),
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                // 💡 画面端のタッチナビゲーションボタン（1ページ目：右端「次へ」 / 2ページ目：左端「戻る」）
+                _buildFloatingSideNav(isWhiteMode: isWhiteMode),
               ],
             ),
+      ),
+    );
+  }
+
+  // 💡 画面端のフローティングナビゲーションボタン（1ページ目は右端に「次へ」、2ページ目は左端に「戻る」）
+  Widget _buildFloatingSideNav({required bool isWhiteMode}) {
+    final isPage0 = _currentPage == 0;
+    final accentColor = isPage0
+        ? (isWhiteMode ? const Color(0xFFC2185B) : Colors.pinkAccent)
+        : (isWhiteMode ? const Color(0xFF006688) : const Color(0xFF00CCFF));
+
+    return Positioned(
+      right: isPage0 ? 12 : null,
+      left: isPage0 ? null : 12,
+      top: 0,
+      bottom: 0,
+      child: Center(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(30),
+            onTap: () {
+              final target = isPage0 ? 1 : 0;
+              _pageController.animateToPage(
+                target,
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOutCubic,
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 16),
+              decoration: BoxDecoration(
+                color: isWhiteMode
+                    ? Colors.white.withValues(alpha: 0.94)
+                    : const Color(0xFF1E293B).withValues(alpha: 0.90),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: accentColor.withValues(alpha: 0.75),
+                  width: 1.8,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: accentColor.withValues(alpha: 0.4),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isPage0 ? Icons.arrow_forward_ios_rounded : Icons.arrow_back_ios_rounded,
+                    color: accentColor,
+                    size: 20,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    isPage0 ? "次\nへ" : "戻\nる",
+                    style: TextStyle(
+                      color: accentColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      height: 1.25,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, Color color, IconData icon) {
+    final dp = context.watch<DataProvider>();
+    final isWhiteMode = dp.displayMode == DisplayMode.pureWhite;
+    final textColor = isWhiteMode ? const Color(0xFF0F172A) : Colors.white;
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 💡 左側の呼吸するように発光するカラーアクセントピラー（セクションの目印）
+          PulsingAccentPillar(
+            color: color,
+            isWhiteMode: isWhiteMode,
+          ),
+          const SizedBox(width: 12),
+          Icon(icon, color: color, size: 28),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: textColor,
+              letterSpacing: 1.2,
+              shadows: isWhiteMode
+                  ? null
+                  : const [
+                      Shadow(
+                        color: Colors.black,
+                        blurRadius: 12.0,
+                        offset: Offset(0, 2),
+                      ),
+                      Shadow(
+                        color: Colors.black,
+                        blurRadius: 4.0,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -666,110 +845,481 @@ class _MainLayoutState extends State<MainLayout> {
     String title,
     IconData icon,
     Color color,
-    Widget? targetPage,
-  ) {
-    bool isAvailable = targetPage != null;
+    Widget? targetPage, {
+    String? imagePath,
+    int entranceIndex = 0,
+  }) {
+    return Expanded(
+      child: InteractiveMenuCard(
+        title: title,
+        icon: icon,
+        color: color,
+        targetPage: targetPage,
+        imagePath: imagePath,
+        entranceIndex: entranceIndex,
+      ),
+    );
+  }
+}
+
+// --- 🌟 インタラクティブ・メニューカード（ドミノ登場・ホバー浮遊・ネオングロー拡散・シマー光彩） ---
+class InteractiveMenuCard extends StatefulWidget {
+  final String title;
+  final IconData icon;
+  final Color color;
+  final Widget? targetPage;
+  final String? imagePath;
+  final int entranceIndex;
+
+  const InteractiveMenuCard({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.color,
+    this.targetPage,
+    this.imagePath,
+    this.entranceIndex = 0,
+  });
+
+  @override
+  State<InteractiveMenuCard> createState() => _InteractiveMenuCardState();
+}
+
+class _InteractiveMenuCardState extends State<InteractiveMenuCard>
+    with TickerProviderStateMixin {
+  bool _isHovered = false;
+  bool _isPressed = false;
+  late AnimationController _shimmerController;
+  late Animation<double> _shimmerAnimation;
+
+  late AnimationController _entranceController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 🚀 画面登場アニメーション（ドミノ式スタッガード）
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 480),
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _entranceController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.0, 0.18),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _entranceController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _scaleAnimation = Tween<double>(
+      begin: 0.93,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _entranceController,
+      curve: Curves.easeOutBack,
+    ));
+
+    // entranceIndex に応じて順番に発火
+    final delayMs = widget.entranceIndex * 60;
+    Future.delayed(Duration(milliseconds: delayMs), () {
+      if (mounted) {
+        _entranceController.forward();
+      }
+    });
+
+    // ✨ シマー光彩アニメーション
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3800),
+    );
+
+    _shimmerAnimation = Tween<double>(begin: -1.0, end: 2.0).animate(
+      CurvedAnimation(
+        parent: _shimmerController,
+        curve: const Interval(0.0, 0.42, curve: Curves.easeInOutSine),
+      ),
+    );
+
+    if (widget.targetPage != null) {
+      _shimmerController.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(InteractiveMenuCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.targetPage != null && !_shimmerController.isAnimating) {
+      _shimmerController.repeat();
+    } else if (widget.targetPage == null && _shimmerController.isAnimating) {
+      _shimmerController.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entranceController.dispose();
+    _shimmerController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAvailable = widget.targetPage != null;
     final dp = Provider.of<DataProvider>(context);
     final isWhiteMode = dp.displayMode == DisplayMode.pureWhite;
+    final isHighlighted = isAvailable && (_isHovered || _isPressed);
 
-    return Expanded(
-      child: InkWell(
-        onTap: isAvailable
-            ? () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => targetPage),
-                );
-              }
-            : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          height: 200,
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isWhiteMode
-                ? (isAvailable ? Colors.white : Colors.grey.shade200)
-                : null,
-            gradient: isWhiteMode
-                ? null
-                : LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      color.withOpacity(isAvailable ? 0.6 : 0.1),
-                      color.withOpacity(isAvailable ? 0.1 : 0.05),
-                    ],
-                  ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: isWhiteMode
-                  ? (isAvailable ? color : Colors.grey.shade300)
-                  : color.withOpacity(isAvailable ? 0.8 : 0.1),
-              width: isWhiteMode ? 2.5 : 2,
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: ScaleTransition(
+          scale: _scaleAnimation,
+          child: MouseRegion(
+            onEnter: isAvailable ? (_) => setState(() => _isHovered = true) : null,
+            onExit: isAvailable ? (_) => setState(() => _isHovered = false) : null,
+            cursor: isAvailable ? SystemMouseCursors.click : SystemMouseCursors.basic,
+            child: AnimatedScale(
+              scale: isHighlighted ? 1.035 : 1.0,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: isAvailable
+              ? () {
+                  Navigator.push(
+                    context,
+                    PageRouteBuilder(
+                      pageBuilder: (context, animation, secondaryAnimation) =>
+                          widget.targetPage!,
+                      transitionDuration: const Duration(milliseconds: 280),
+                      reverseTransitionDuration:
+                          const Duration(milliseconds: 240),
+                      transitionsBuilder:
+                          (context, animation, secondaryAnimation, child) {
+                        final curve = CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                          reverseCurve: Curves.easeInCubic,
+                        );
+                        return FadeTransition(
+                          opacity: Tween<double>(begin: 0.0, end: 1.0)
+                              .animate(curve),
+                          child: ScaleTransition(
+                            scale: Tween<double>(begin: 0.92, end: 1.0)
+                                .animate(curve),
+                            child: child,
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }
+              : null,
+          onHighlightChanged: isAvailable
+              ? (val) => setState(() => _isPressed = val)
+              : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            height: 200,
+            padding: EdgeInsets.all(widget.imagePath != null ? 0 : 10),
+            decoration: BoxDecoration(
+              color: widget.imagePath != null
+                  ? null
+                  : dp.currentCardColor.withValues(alpha: 0.4),
+              image: widget.imagePath != null
+                  ? DecorationImage(
+                      image: AssetImage(widget.imagePath!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+              gradient: (isWhiteMode || widget.imagePath != null)
+                  ? null
+                  : LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        widget.color.withValues(
+                          alpha: isAvailable ? (isHighlighted ? 0.8 : 0.6) : 0.1,
+                        ),
+                        widget.color.withValues(
+                          alpha: isAvailable ? (isHighlighted ? 0.2 : 0.1) : 0.05,
+                        ),
+                      ],
+                    ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isWhiteMode
+                    ? (isAvailable ? widget.color : Colors.grey.shade300)
+                    : (isAvailable
+                        ? (isHighlighted
+                            ? widget.color
+                            : widget.color.withValues(alpha: 0.95))
+                        : widget.color.withValues(alpha: 0.15)),
+                width: isWhiteMode
+                    ? (isHighlighted ? 3.0 : 2.5)
+                    : (isHighlighted ? 2.5 : 2.0),
+              ),
+              boxShadow: isAvailable
+                  ? (isHighlighted
+                      ? [
+                          BoxShadow(
+                            color: isWhiteMode
+                                ? widget.color.withValues(alpha: 0.35)
+                                : widget.color.withValues(alpha: 0.70),
+                            blurRadius: isWhiteMode ? 16 : 24,
+                            spreadRadius: isWhiteMode ? 1 : 2,
+                            offset: const Offset(0, 4),
+                          ),
+                          BoxShadow(
+                            color: isWhiteMode
+                                ? Colors.black.withValues(alpha: 0.12)
+                                : widget.color.withValues(alpha: 0.35),
+                            blurRadius: 36,
+                            spreadRadius: 6,
+                            offset: const Offset(0, 8),
+                          ),
+                        ]
+                      : [
+                          BoxShadow(
+                            color: isWhiteMode
+                                ? Colors.black.withValues(alpha: 0.08)
+                                : widget.color.withValues(alpha: 0.35),
+                            blurRadius: isWhiteMode ? 8 : 12,
+                            spreadRadius: isWhiteMode ? 0 : 1,
+                            offset: const Offset(0, 4),
+                          ),
+                        ])
+                  : null,
             ),
-            boxShadow: isWhiteMode && isAvailable
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                children: [
+                  if (widget.imagePath != null)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.85),
+                              Colors.transparent,
+                            ],
+                            stops: const [0.0, 0.55],
+                          ),
+                        ),
+                      ),
                     ),
-                  ]
-                : null,
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Icon(
-                    icon,
-                    size: 60,
-                    color: isAvailable
-                        ? color
-                        : (isWhiteMode ? Colors.grey.shade400 : Colors.white10),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 15),
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: isAvailable
-                          ? dp.mainTextColor
-                          : (isWhiteMode
-                                ? Colors.grey.shade500
-                                : Colors.white10),
+                  // ✨ 光の筋が走るシマーエフェクト (Shimmer Light Sweep)
+                  if (isAvailable)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: _shimmerAnimation,
+                          builder: (context, child) {
+                            final progress = _shimmerAnimation.value;
+                            return Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment(-2.5 + progress * 3.5, -1.0),
+                                  end: Alignment(-1.5 + progress * 3.5, 1.0),
+                                  colors: [
+                                    Colors.transparent,
+                                    Colors.white.withValues(
+                                      alpha: isWhiteMode ? 0.28 : 0.18,
+                                    ),
+                                    Colors.transparent,
+                                  ],
+                                  stops: const [0.0, 0.5, 1.0],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
-              if (!isAvailable)
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      "(準備中)",
-                      style: TextStyle(
-                        color: isWhiteMode
-                            ? Colors.grey.shade400
-                            : Colors.white10,
-                        fontSize: 14,
+                  Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.all(widget.imagePath != null ? 16.0 : 0.0),
+                      child: Column(
+                        mainAxisAlignment: widget.imagePath != null
+                            ? MainAxisAlignment.end
+                            : MainAxisAlignment.center,
+                        crossAxisAlignment: widget.imagePath != null
+                            ? CrossAxisAlignment.start
+                            : CrossAxisAlignment.center,
+                        children: [
+                          if (widget.imagePath == null)
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Icon(
+                                  widget.icon,
+                                  size: 60,
+                                  color: isAvailable
+                                      ? widget.color
+                                      : (isWhiteMode
+                                          ? Colors.grey.shade400
+                                          : Colors.white24),
+                                ),
+                              ),
+                            ),
+                          if (widget.imagePath == null) const SizedBox(height: 15),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                widget.title,
+                                textAlign: widget.imagePath != null
+                                    ? TextAlign.left
+                                    : TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: widget.imagePath != null ? 30 : 22,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: widget.imagePath != null ? 1.5 : 1.0,
+                                  color: isAvailable
+                                      ? (widget.imagePath != null
+                                          ? Colors.white
+                                          : (isWhiteMode ? Colors.black87 : Colors.white))
+                                      : (isWhiteMode ? Colors.grey.shade500 : Colors.white24),
+                                  shadows: isAvailable
+                                      ? const [
+                                          Shadow(
+                                            offset: Offset(0, 2),
+                                            blurRadius: 8.0,
+                                            color: Colors.black,
+                                          ),
+                                          Shadow(
+                                            offset: Offset(0, 0),
+                                            blurRadius: 14.0,
+                                            color: Colors.black,
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (!isAvailable)
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  "(準備中)",
+                                  style: TextStyle(
+                                    color: isWhiteMode
+                                        ? Colors.grey.shade400
+                                        : Colors.white10,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
+    ),
+  ),
+),
+);
+  }
+}
+
+// ============================================================================
+// 💡 セクションヘッダー用: 呼吸発光アクセントピラー (PulsingAccentPillar)
+// ============================================================================
+class PulsingAccentPillar extends StatefulWidget {
+  final Color color;
+  final bool isWhiteMode;
+
+  const PulsingAccentPillar({
+    super.key,
+    required this.color,
+    required this.isWhiteMode,
+  });
+
+  @override
+  State<PulsingAccentPillar> createState() => _PulsingAccentPillarState();
+}
+
+class _PulsingAccentPillarState extends State<PulsingAccentPillar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+
+    _pulseAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOutSine,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        final t = _pulseAnimation.value;
+        final blur = 6.0 + (t * 8.0); // 6.0 -> 14.0
+        final spread = 0.5 + (t * 1.8); // 0.5 -> 2.3
+        final glowAlpha = 0.40 + (t * 0.45); // 0.40 -> 0.85
+
+        return Container(
+          width: 5,
+          height: 28,
+          decoration: BoxDecoration(
+            color: widget.color,
+            borderRadius: BorderRadius.circular(3),
+            boxShadow: widget.isWhiteMode
+                ? [
+                    BoxShadow(
+                      color: widget.color.withValues(alpha: 0.25 + (t * 0.2)),
+                      blurRadius: 4.0 + (t * 4.0),
+                      spreadRadius: 0.5,
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: widget.color.withValues(alpha: glowAlpha),
+                      blurRadius: blur,
+                      spreadRadius: spread,
+                    ),
+                  ],
+          ),
+        );
+      },
     );
   }
 }
@@ -796,46 +1346,52 @@ class _TabPageLayoutState extends State<TabPageLayout> {
     final dp = context.watch<DataProvider>();
     final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
-    return Scaffold(
-      backgroundColor: dp.currentBgColor,
-      appBar: AppBar(
-        backgroundColor: dp.currentCardColor,
-        elevation: isWhite ? 2 : 0,
-        title: Text(
-          "4F 作業実績詳細",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: dp.mainTextColor,
+    return AppBackgroundWrapper(
+      blurSigma: 10.0,
+      whiteAlpha: 0.78,
+      darkAlpha: 0.72,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: dp.currentCardColor.withOpacity(0.55),
+            elevation: isWhite ? 2 : 0,
+            iconTheme: IconThemeData(color: dp.mainTextColor),
+            title: Text(
+              "4F 作業実績詳細",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: dp.mainTextColor,
+              ),
+            ),
+            actions: const [
+              Center(child: ConnectionStatusIndicator()),
+              SizedBox(width: 20),
+            ],
+          ),
+          body: _tabs[_selectedIndex],
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: (index) => setState(() => _selectedIndex = index),
+            backgroundColor: dp.currentCardColor.withOpacity(0.85),
+            elevation: 0,
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: isWhite
+                ? const Color(0xFF006688)
+                : const Color(0xFF00CCFF),
+            unselectedItemColor: isWhite ? Colors.black38 : Colors.white30,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.emoji_events_rounded),
+                label: 'ランキング',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.fact_check_rounded),
+                label: '本日出来高',
+              ),
+              BottomNavigationBarItem(icon: Icon(Icons.summarize), label: '機種別集計'),
+            ],
           ),
         ),
-        actions: const [
-          // 💡 更新・閉じるボタンを削除し、インジケーターだけを配置
-          Center(child: ConnectionStatusIndicator()),
-          SizedBox(width: 20),
-        ],
-      ),
-      body: _tabs[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        backgroundColor: dp.currentCardColor,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: isWhite
-            ? const Color(0xFF006688)
-            : const Color(0xFF00CCFF),
-        unselectedItemColor: isWhite ? Colors.black38 : Colors.white30,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.emoji_events_rounded),
-            label: 'ランキング',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.fact_check_rounded),
-            label: '本日出来高',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.summarize), label: '機種別集計'),
-        ],
-      ),
-    );
+      );
   }
 }

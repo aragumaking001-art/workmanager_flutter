@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 import 'short_term_schedule_tab.dart';
 
 class ScheduleProgressTab extends StatefulWidget {
@@ -434,10 +435,11 @@ class _ScheduleProgressTabState extends State<ScheduleProgressTab> {
     const double modelColWidth = 150.0;
     const double headerHeight = 50.0;
 
-    return Scaffold(
-      backgroundColor: dp.currentBgColor,
-      appBar: AppBar(
-        backgroundColor: dp.currentCardColor,
+    return AppBackgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: dp.currentCardColor.withValues(alpha: isDark ? 0.65 : 0.85),
         elevation: isDark ? 0 : 2,
         iconTheme: IconThemeData(color: dp.mainTextColor),
         title: Text(
@@ -756,8 +758,9 @@ class _ScheduleProgressTabState extends State<ScheduleProgressTab> {
         ), // Expanded
           ],
         ), // Column
-      ), // Container
-    ); // Scaffold
+        ), // Container
+      ), // Scaffold
+    ); // AppBackgroundWrapper
   }
 
   Widget _buildLegendItem(

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 
 class SeatingChartTab extends StatefulWidget {
   const SeatingChartTab({super.key});
@@ -12,20 +13,46 @@ class SeatingChartTab extends StatefulWidget {
 
 class _SeatingChartTabState extends State<SeatingChartTab> {
   Timer? _timer;
+  Timer? _pollTimer;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
     super.initState();
+    // 💡 画面表示直後にも最新の稼働データを取得
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshData();
+    });
+
+    // 💡 作業経過時間の毎秒カウントアップ
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {});
       }
     });
+
+    // 💡 30秒ごとに稼働状況データを定期ポーリング
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _refreshData();
+      }
+    });
+  }
+
+  Future<void> _refreshData() async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+    try {
+      await Provider.of<DataProvider>(context, listen: false).fetchActiveWorkersOnly();
+    } finally {
+      _isRefreshing = false;
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _pollTimer?.cancel();
     super.dispose();
   }
 
@@ -49,8 +76,9 @@ class _SeatingChartTabState extends State<SeatingChartTab> {
     final cleanWorkers = workers.where((w) => w.inferredTask == "清掃").toList();
     final swapWorkers = workers.where((w) => w.inferredTask == "筐体交換").toList();
 
-    return Scaffold(
-      backgroundColor: data.currentBgColor,
+    return AppBackgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -148,7 +176,7 @@ class _SeatingChartTabState extends State<SeatingChartTab> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildColumn(String title, List<ActiveWorker> colWorkers, Color headerColor, IconData headerIcon, DataProvider data, bool isWhite, {bool isGrid = false}) {

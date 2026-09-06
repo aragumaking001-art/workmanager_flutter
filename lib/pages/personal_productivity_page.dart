@@ -5,6 +5,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 
 class PersonalProductivityPage extends StatefulWidget {
   final String? initialWorkerId;
@@ -711,9 +712,9 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
     final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
     if (widget.isKioskMode) {
-      // Kioskモードの時は、上部のAppBarとタブバーを消して（またはシンプルにして）個人別詳細のみ表示する
+      // Kioskモードの時は、親のKioskDetailScreenのAppBackgroundWrapperを透過して表示
       return Scaffold(
-        backgroundColor: dp.currentBgColor,
+        backgroundColor: Colors.transparent,
         body: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1200),
@@ -723,40 +724,42 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
       );
     }
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: dp.currentBgColor,
-        appBar: AppBar(
-          backgroundColor: dp.currentCardColor,
-          elevation: isWhite ? 2 : 0,
-          iconTheme: IconThemeData(color: dp.mainTextColor),
-          leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: dp.mainTextColor),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Text("個人別生産性確認", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: dp.mainTextColor)),
-          actions: const [
-            Padding(
-              padding: EdgeInsets.only(right: 20.0),
-              child: Center(child: ConnectionStatusIndicator()),
+    return AppBackgroundWrapper(
+      child: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: dp.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
+            elevation: isWhite ? 2 : 0,
+            iconTheme: IconThemeData(color: dp.mainTextColor),
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back, color: dp.mainTextColor),
+              onPressed: () => Navigator.pop(context),
             ),
-          ],
-          bottom: TabBar(
-            labelColor: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent,
-            unselectedLabelColor: isWhite ? Colors.black38 : Colors.white54,
-            indicatorColor: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent,
-            tabs: const [
-              Tab(icon: Icon(Icons.person), text: "個人別詳細"),
-              Tab(icon: Icon(Icons.leaderboard), text: "月別生産性ランキング"),
+            title: Text("個人別生産性確認", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: dp.mainTextColor)),
+            actions: const [
+              Padding(
+                padding: EdgeInsets.only(right: 20.0),
+                child: Center(child: ConnectionStatusIndicator()),
+              ),
+            ],
+            bottom: TabBar(
+              labelColor: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent,
+              unselectedLabelColor: isWhite ? Colors.black38 : Colors.white54,
+              indicatorColor: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent,
+              tabs: const [
+                Tab(icon: Icon(Icons.person), text: "個人別詳細"),
+                Tab(icon: Icon(Icons.leaderboard), text: "月別生産性ランキング"),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              _buildPersonalTab(),
+              _buildRankingTab(),
             ],
           ),
-        ),
-        body: TabBarView(
-          children: [
-            _buildPersonalTab(),
-            _buildRankingTab(),
-          ],
         ),
       ),
     );
@@ -913,56 +916,96 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
             ),
             const SizedBox(height: 20),
 
-            if (!_isFetching && _aggregatedData.isNotEmpty && _selectedWorker != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 20),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                decoration: BoxDecoration(
-                  color: isWhite ? const Color(0xFF008855).withOpacity(0.12) : const Color(0xFF00FFCC).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC).withOpacity(0.5), width: isWhite ? 2 : 1),
-                ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.stars, color: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC), size: 32),
-                      const SizedBox(width: 12),
-                      Text("全機種 総合達成率:", style: TextStyle(color: dp.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 12),
-                      Text(
-                        "${_totalAchievementRate.toStringAsFixed(1)}%",
-                        style: TextStyle(
-                          color: _totalAchievementRate >= 100 ? (isWhite ? const Color(0xFF008855) : Colors.greenAccent) : (_totalAchievementRate >= 80 ? (isWhite ? const Color(0xFFD45500) : Colors.orangeAccent) : (isWhite ? Colors.red.shade700 : Colors.redAccent)),
-                          fontSize: 34,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 36),
-                      Container(width: 2, height: 40, color: dp.borderColor),
-                      const SizedBox(width: 36),
-                      Icon(Icons.verified_outlined, color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent, size: 32),
-                      const SizedBox(width: 12),
-                      Text("不良率:", style: TextStyle(color: dp.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 12),
-                      Text(
-                        "${_totalSwapRate.toStringAsFixed(1)}%",
-                        style: TextStyle(
-                          color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent,
-                          fontSize: 34,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            // データ表示エリア
             Expanded(
-              child: _isFetching 
-                ? Center(child: CircularProgressIndicator(color: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent))
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 左側: 総合達成率の縦長パネル
+                  if (!_isFetching && _aggregatedData.isNotEmpty && _selectedWorker != null)
+                    Container(
+                      width: 250,
+                      margin: const EdgeInsets.only(right: 20, bottom: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 25),
+                      decoration: BoxDecoration(
+                        color: isWhite ? const Color(0xFF008855).withOpacity(0.12) : const Color(0xFF00FFCC).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC).withOpacity(0.5), width: isWhite ? 2 : 1),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.stars, color: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC), size: 28),
+                                const SizedBox(width: 8),
+                                Text("総合達成率", style: TextStyle(color: dp.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.4),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: Image.asset(
+                                  _totalAchievementRate >= 100 
+                                      ? 'assets/mascot_excellent.jpg' 
+                                      : (_totalAchievementRate >= 80 
+                                          ? 'assets/mascot_good_pace.jpg' 
+                                          : 'assets/mascot_fight.jpg'),
+                                  width: 120, // 140から少し縮小してキオスクでも収まるように
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              "${_totalAchievementRate.toStringAsFixed(1)}%",
+                              style: TextStyle(
+                                color: _totalAchievementRate >= 100 ? (isWhite ? const Color(0xFF008855) : Colors.greenAccent) : (_totalAchievementRate >= 80 ? (isWhite ? const Color(0xFFD45500) : Colors.orangeAccent) : (isWhite ? Colors.red.shade700 : Colors.redAccent)),
+                                fontSize: 46,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Container(height: 2, width: double.infinity, color: dp.borderColor),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.verified_outlined, color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent, size: 28),
+                                const SizedBox(width: 8),
+                                Text("不良率", style: TextStyle(color: dp.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              "${_totalSwapRate.toStringAsFixed(1)}%",
+                              style: TextStyle(
+                                color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent,
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // 右側: データ表示エリア (GridView)
+                  Expanded(
+                    child: _isFetching 
+                      ? Center(child: CircularProgressIndicator(color: isWhite ? const Color(0xFFD45500) : Colors.orangeAccent))
                 : _aggregatedData.isEmpty
                   ? Center(child: Text("指定された条件のデータはありません", style: TextStyle(color: dp.subTextColor, fontSize: 20)))
                   : GridView.builder(
@@ -1019,14 +1062,13 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                               BoxShadow(color: typeColor.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 3))
                             ] : null,
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Row(
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1043,68 +1085,111 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                                         ),
                                       ],
                                     ),
-                                  ),
-                                  Text(
-                                    "達成率: ${achievePercent.toStringAsFixed(1)}%",
-                                    style: TextStyle(color: progressColor, fontSize: 20, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    currentProd.toStringAsFixed(1),
-                                    style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold, color: dp.mainTextColor),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 4, left: 3),
-                                    child: Text("台/1H", style: TextStyle(fontSize: 14, color: dp.subTextColor, fontWeight: FontWeight.bold)),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text(
-                                      "(目標: $stdQty)",
-                                      style: TextStyle(fontSize: 16, color: dp.subTextColor, fontWeight: FontWeight.bold),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          currentProd.toStringAsFixed(1),
+                                          style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold, color: dp.mainTextColor),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 4, left: 3),
+                                          child: Text("台/1H", style: TextStyle(fontSize: 14, color: dp.subTextColor, fontWeight: FontWeight.bold)),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 4),
+                                          child: Text(
+                                            "(目標: $stdQty)",
+                                            style: TextStyle(fontSize: 16, color: dp.subTextColor, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            Text("処理数: $totalQty台", style: TextStyle(fontSize: 13, color: dp.mainTextColor, fontWeight: FontWeight.bold)),
+                                            Text("時間: $timeDisplay", style: TextStyle(fontSize: 13, color: dp.mainTextColor, fontWeight: FontWeight.bold)),
+                                          ],
+                                        )
+                                      ],
                                     ),
-                                  ),
-                                  const Spacer(),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Text("処理数: $totalQty台", style: TextStyle(fontSize: 13, color: dp.mainTextColor, fontWeight: FontWeight.bold)),
-                                      Text("時間: $timeDisplay", style: TextStyle(fontSize: 13, color: dp.mainTextColor, fontWeight: FontWeight.bold)),
-                                    ],
-                                  )
-                                ],
-                              ),
-                              const Spacer(),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: LinearProgressIndicator(
-                                  value: achieveRate.clamp(0.0, 1.5) / 1.5,
-                                  backgroundColor: isWhite ? Colors.grey.shade200 : Colors.white10,
-                                  color: progressColor,
-                                  minHeight: 12,
+                                    const Spacer(),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: LinearProgressIndicator(
+                                        value: achieveRate.clamp(0.0, 1.5) / 1.5,
+                                        backgroundColor: isWhite ? Colors.grey.shade200 : Colors.white10,
+                                        color: progressColor,
+                                        minHeight: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Stack(
+                                      children: [
+                                        Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text("0%", style: TextStyle(color: dp.subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                        ),
+                                        Align(
+                                          alignment: const Alignment(0.333, 0),
+                                          child: Text("100%", style: TextStyle(color: dp.subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                        ),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: Text("150%+", style: TextStyle(color: dp.subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ],
+                                    )
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              const SizedBox(width: 15),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text("0%", style: TextStyle(color: dp.subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  Text("100%", style: TextStyle(color: dp.subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  Text("150%+", style: TextStyle(color: dp.subTextColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ClipOval(
+                                      child: Image.asset(
+                                        achievePercent >= 100 
+                                            ? 'assets/mascot_excellent.jpg' 
+                                            : (achievePercent >= 80 
+                                                ? 'assets/mascot_good_pace.jpg' 
+                                                : 'assets/mascot_fight.jpg'),
+                                        width: 60,
+                                        height: 60,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "達成率\n${achievePercent.toStringAsFixed(1)}%",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: progressColor, fontSize: 14, fontWeight: FontWeight.bold, height: 1.2),
+                                  ),
                                 ],
-                              )
+                              ),
                             ],
                           ),
                         );
                       },
                     ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -1190,16 +1275,24 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                             );
                           }
 
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 15),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                            decoration: BoxDecoration(
-                              color: isWhite ? Colors.white : typeColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: typeColor.withOpacity(isWhite ? 0.6 : 0.5), width: isWhite ? 2 : 1),
-                              boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2))] : null,
-                            ),
-                            child: Row(
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedWorker = item['worker_name'];
+                              });
+                              _fetchProductivityData();
+                              DefaultTabController.of(context)?.animateTo(0);
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 15),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              decoration: BoxDecoration(
+                                color: isWhite ? Colors.white : typeColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: typeColor.withOpacity(isWhite ? 0.6 : 0.5), width: isWhite ? 2 : 1),
+                                boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2))] : null,
+                              ),
+                              child: Row(
                               children: [
                                 rankWidget,
                                 const SizedBox(width: 18),
@@ -1235,13 +1328,44 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                                       ),
                                     ),
                                     const SizedBox(width: 28),
-                                    Text("総合達成率: ${achievePercent.toStringAsFixed(1)}%", style: TextStyle(color: progressColor, fontSize: 26, fontWeight: FontWeight.bold)),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.3),
+                                                blurRadius: 5,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                          child: ClipOval(
+                                            child: Image.asset(
+                                              achievePercent >= 100 
+                                                  ? 'assets/mascot_excellent.jpg' 
+                                                  : (achievePercent >= 80 
+                                                      ? 'assets/mascot_good_pace.jpg' 
+                                                      : 'assets/mascot_fight.jpg'),
+                                              width: 55,
+                                              height: 55,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Text("総合達成率: ${achievePercent.toStringAsFixed(1)}%", style: TextStyle(color: progressColor, fontSize: 26, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ],
                             ),
-                          );
-                        },
+                          ),
+                        );
+                      },
                       ),
           ),
         ],

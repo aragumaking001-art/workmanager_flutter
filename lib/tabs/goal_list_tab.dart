@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mysql_client/mysql_client.dart';
 import 'package:provider/provider.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 
 class GoalListTab extends StatefulWidget {
   const GoalListTab({super.key});
@@ -65,10 +66,11 @@ class _GoalListTabState extends State<GoalListTab> {
     final dp = context.watch<DataProvider>();
     final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
-    return Scaffold(
-      backgroundColor: dp.currentBgColor,
-      appBar: AppBar(
-        backgroundColor: dp.currentCardColor,
+    return AppBackgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: dp.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
         elevation: isWhite ? 2 : 0,
         iconTheme: IconThemeData(color: dp.mainTextColor),
         title: Text("作業標準台数", style: TextStyle(fontWeight: FontWeight.bold, color: dp.mainTextColor)),
@@ -101,7 +103,7 @@ class _GoalListTabState extends State<GoalListTab> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
                       decoration: BoxDecoration(
-                        color: dp.currentCardColor,
+                        color: dp.currentCardColor.withValues(alpha: isWhite ? 0.88 : 0.75),
                         border: Border(bottom: BorderSide(color: isWhite ? const Color(0xFF007799) : const Color(0xFF00CCFF), width: 2)),
                       ),
                       child: Row(
@@ -135,8 +137,8 @@ class _GoalListTabState extends State<GoalListTab> {
                           return Container(
                             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
                             color: isWhite 
-                                ? (isEven ? Colors.white : Colors.grey.shade100)
-                                : (isEven ? const Color(0xFF16181D) : const Color(0xFF0F1115)),
+                                ? (isEven ? Colors.white.withValues(alpha: 0.85) : Colors.grey.shade100.withValues(alpha: 0.75))
+                                : (isEven ? const Color(0xFF16181D).withValues(alpha: 0.75) : const Color(0xFF0F1115).withValues(alpha: 0.65)),
                             child: Row(
                               children: [
                                 Expanded(
@@ -175,6 +177,7 @@ class _GoalListTabState extends State<GoalListTab> {
                     ),
                   ],
                 ),
+      ),
     );
   }
 }

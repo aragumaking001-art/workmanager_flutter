@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/kiosk_provider.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 import 'kiosk_detail_screen.dart';
 
 class KioskScreen extends StatefulWidget {
@@ -83,9 +84,10 @@ class _KioskScreenState extends State<KioskScreen> with SingleTickerProviderStat
       Future.microtask(() => _navigateToDetail(context, kiosk.currentWorkerId!));
     }
 
-    return Scaffold(
-      backgroundColor: dataProvider.currentBgColor,
-      body: Stack(
+    return AppBackgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
         children: [
           // 戻るボタン (キオスクモード終了用)
           Positioned(
@@ -147,6 +149,6 @@ class _KioskScreenState extends State<KioskScreen> with SingleTickerProviderStat
           ),
         ],
       ),
-    );
+    ));
   }
 }

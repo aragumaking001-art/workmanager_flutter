@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/data_provider.dart';
@@ -29,7 +30,31 @@ class _PriorityItem {
 
 class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
   DateTime _selectedDate = DateTime.now();
+  DateTime _lastRealDate = DateTime.now();
+  Timer? _dayCheckTimer;
   final weekDays = ['月', '火', '水', '木', '金', '土', '日'];
+
+  @override
+  void initState() {
+    super.initState();
+    _lastRealDate = DateTime.now();
+    // 1分ごとに現在時刻をチェックし、日付が変わっていれば _selectedDate を今日にリセットする
+    _dayCheckTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      final now = DateTime.now();
+      if (now.year != _lastRealDate.year || now.month != _lastRealDate.month || now.day != _lastRealDate.day) {
+        setState(() {
+          _lastRealDate = now;
+          _selectedDate = now;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _dayCheckTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -204,7 +229,24 @@ class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
                   constraints: const BoxConstraints(),
                   onPressed: () {
                     setState(() {
-                      _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+                      // 現在表示されている一番左の日付から1日前へさかのぼり、
+                      // 予定が存在する日を見つけたらそこを _selectedDate にする
+                      DateTime prev = dates[0].subtract(const Duration(days: 1));
+                      bool found = false;
+                      for (int i = 0; i < 60; i++) {
+                        if (hasPlanOnDate(prev)) {
+                          found = true;
+                          break;
+                        }
+                        prev = prev.subtract(const Duration(days: 1));
+                      }
+                      
+                      if (found) {
+                        _selectedDate = prev;
+                      } else {
+                        // 過去60日間に予定がない場合は、単純に1日戻す
+                        _selectedDate = dates[0].subtract(const Duration(days: 1));
+                      }
                     });
                   },
                 ),
@@ -229,7 +271,9 @@ class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
                   constraints: const BoxConstraints(),
                   onPressed: () {
                     setState(() {
-                      _selectedDate = _selectedDate.add(const Duration(days: 1));
+                      // 現在表示されている一番左の日付の「次の日」を開始日にすることで、
+                      // 確実に表示が1列分（予定のある次の日へ）進むようにする
+                      _selectedDate = dates[0].add(const Duration(days: 1));
                     });
                   },
                 ),

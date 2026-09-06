@@ -223,14 +223,14 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
         : null;
 
     return Container(
-      color: dataProvider.currentBgColor,
+      color: Colors.transparent,
       child: Row(
         children: [
           Expanded(
             flex: 3,
             child: Container(
               decoration: BoxDecoration(
-                color: isWhite ? Colors.white : const Color(0xFF14161E),
+                color: isWhite ? Colors.white : const Color(0xFF14161E).withOpacity(0.75),
                 border: Border(right: BorderSide(color: dataProvider.borderColor)),
               ),
               child: Column(

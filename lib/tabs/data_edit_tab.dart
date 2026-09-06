@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:mysql_client/mysql_client.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 
 enum EditMode { menu, today, previousDay, past }
 
@@ -1019,7 +1020,27 @@ class _DataEditTabState extends State<DataEditTab> {
                       endMins += 24 * 60;
                     }
                     
-                    int diffMins = endMins - startMins;
+                    int totalBreakMins = 0;
+                    final breaks = [
+                      {'start': 11 * 60 + 55, 'duration': 50}, // 11:55 - 12:45
+                      {'start': 15 * 60 + 0, 'duration': 10},  // 15:00 - 15:10
+                      {'start': 18 * 60 + 30, 'duration': 10}, // 18:30 - 18:40
+                    ];
+
+                    for (var b in breaks) {
+                      int bStart = b['start']!;
+                      int bEnd = bStart + b['duration']!;
+                      
+                      int overlapStart = startMins > bStart ? startMins : bStart;
+                      int overlapEnd = endMins < bEnd ? endMins : bEnd;
+                      
+                      if (overlapStart < overlapEnd) {
+                        totalBreakMins += (overlapEnd - overlapStart);
+                      }
+                    }
+                    
+                    int diffMins = (endMins - startMins) - totalBreakMins;
+                    if (diffMins < 0) diffMins = 0;
                     
                     int h = diffMins ~/ 60;
                     int m = diffMins % 60;
@@ -1071,11 +1092,13 @@ class _DataEditTabState extends State<DataEditTab> {
     if (_currentMode == EditMode.previousDay) title = _selectedPrevDate != null ? "前日データ修正 (${DateFormat('MM/dd').format(_selectedPrevDate!)})" : "前日データ修正";
     if (_currentMode == EditMode.past) title = "過去データ修正";
     final dp = context.watch<DataProvider>();
+    final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
-    return Scaffold(
-      backgroundColor: dp.currentBgColor,
-      appBar: AppBar(
-        backgroundColor: dp.currentCardColor,
+    return AppBackgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: dp.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
         elevation: dp.displayMode == DisplayMode.pureWhite ? 2 : 0,
         iconTheme: IconThemeData(color: dp.mainTextColor),
         title: Text(
@@ -1099,6 +1122,7 @@ class _DataEditTabState extends State<DataEditTab> {
         ],
       ),
       body: _buildBody(),
+      ),
     );
   }
 

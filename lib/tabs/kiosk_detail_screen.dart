@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 import 'personal_stats_tab.dart';
 import '../pages/personal_productivity_page.dart';
 
@@ -52,13 +53,15 @@ class _KioskDetailScreenState extends State<KioskDetailScreen> {
       // 画面上のあらゆるタップやスワイプを検知してタイマーをリセットする
       onPointerDown: (_) => _resetTimer(),
       onPointerMove: (_) => _resetTimer(),
-      child: DefaultTabController(
-        length: 2,
-        child: Scaffold(
-          backgroundColor: dp.currentBgColor,
-          appBar: AppBar(
-            backgroundColor: dp.currentCardColor,
-            elevation: isWhite ? 2 : 0,
+      child: AppBackgroundWrapper(
+        child: DefaultTabController(
+          length: 2,
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              backgroundColor:
+                  dp.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
+              elevation: isWhite ? 2 : 0,
             automaticallyImplyLeading: false, // 戻るボタンは自前で右側に置く
             title: Text(
               "個人の実績・生産性ステータス",
@@ -121,6 +124,7 @@ class _KioskDetailScreenState extends State<KioskDetailScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

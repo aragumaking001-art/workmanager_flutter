@@ -4,6 +4,7 @@ import 'package:mysql_client/mysql_client.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 
 enum SearchMode { date, worker }
 
@@ -457,11 +458,13 @@ class _DataViewTabState extends State<DataViewTab> {
     final dp = context.watch<DataProvider>();
     final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
-    return Scaffold(
-      backgroundColor: dp.currentBgColor,
-      appBar: AppBar(
-        backgroundColor: dp.currentCardColor,
-        elevation: isWhite ? 2 : 0,
+    return AppBackgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor:
+              dp.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
+          elevation: isWhite ? 2 : 0,
         iconTheme: IconThemeData(color: dp.mainTextColor),
         title: Text(
           "データ確認",
@@ -602,7 +605,7 @@ class _DataViewTabState extends State<DataViewTab> {
         ],
       ),
       body: Container(
-        color: dp.currentBgColor,
+        color: Colors.transparent,
         padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -636,7 +639,9 @@ class _DataViewTabState extends State<DataViewTab> {
                                 vertical: 12.0,
                               ),
                               decoration: BoxDecoration(
-                                color: dp.currentCardColor,
+                                color: dp.currentCardColor.withValues(
+                                  alpha: isWhite ? 0.9 : 0.8,
+                                ),
                                 border: Border(
                                   bottom: BorderSide(
                                     color: isWhite
@@ -989,11 +994,11 @@ class _DataViewTabState extends State<DataViewTab> {
 
                                   Color rowBg = isWhite
                                       ? (isEven
-                                            ? Colors.white
-                                            : const Color(0xFFF2F6F9))
+                                            ? Colors.white.withValues(alpha: 0.85)
+                                            : const Color(0xFFF2F6F9).withValues(alpha: 0.85))
                                       : (isEven
-                                            ? const Color(0xFF0F1115)
-                                            : const Color(0xFF14161C));
+                                            ? const Color(0xFF0F1115).withValues(alpha: 0.75)
+                                            : const Color(0xFF14161C).withValues(alpha: 0.75));
 
                                   return Container(
                                     decoration: BoxDecoration(
@@ -1133,7 +1138,7 @@ class _DataViewTabState extends State<DataViewTab> {
           ],
         ),
       ),
-    );
+    ));
   }
 
   Widget _compactInfoChip(

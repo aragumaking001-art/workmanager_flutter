@@ -475,7 +475,7 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
 
     if (data.isLoading && data.todayModels.isEmpty && !_isCustomDate) {
       return Scaffold(
-        backgroundColor: data.currentBgColor,
+        backgroundColor: Colors.transparent,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -543,7 +543,7 @@ class _TodaySummaryTabState extends State<TodaySummaryTab> {
     }
 
     return Scaffold(
-      backgroundColor: data.currentBgColor,
+      backgroundColor: Colors.transparent,
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(

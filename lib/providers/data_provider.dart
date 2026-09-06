@@ -636,6 +636,112 @@ class DataProvider extends ChangeNotifier {
     }
   }
 
+  bool _isFetchingActiveWorkers = false;
+
+  /// 💡 稼働状況（座席表）画面用：30秒おきの軽量ポーリング更新
+  Future<void> fetchActiveWorkersOnly() async {
+    if (_isFetchingActiveWorkers) return;
+    _isFetchingActiveWorkers = true;
+
+    try {
+      final conn = await MySQLConnection.createConnection(
+        host: '192.168.10.101',
+        port: 3306,
+        userName: 'work_user',
+        password: 'work1234',
+        databaseName: 'work_manager_db',
+      );
+
+      await conn.connect();
+      await _fetchActiveWorkers(conn);
+      await conn.close();
+
+      if (!isOnline) {
+        isOnline = true;
+      }
+      notifyListeners();
+    } catch (e) {
+      print("🚨 稼働状況単体更新エラー: $e");
+    } finally {
+      _isFetchingActiveWorkers = false;
+    }
+  }
+
+  /// 💡 稼働状況データ取得ヘルパー（共通処理）
+  Future<void> _fetchActiveWorkers(MySQLConnection conn) async {
+    try {
+      var activeResults = await conn.execute('''
+        SELECT a.worker_id, m.worker_name, a.start_time, a.is_paused, a.paused_at
+        FROM t_active_workers a
+        LEFT JOIN m_members m ON a.worker_id = m.worker_id
+      ''');
+
+      // 直近1週間のうち、各作業者の「一番最後（最新）の作業ログ」を取得して推測する
+      var taskCountResults = await conn.execute('''
+        SELECT worker_id, 
+               IFNULL(air_clean_qty, 0) as air_sum,
+               IFNULL(clean_qty, 0) as clean_sum,
+               IFNULL(swap_qty, 0) as swap_sum
+        FROM unit_cleaning_logs
+        WHERE id IN (
+          SELECT MAX(id)
+          FROM unit_cleaning_logs
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+          GROUP BY worker_id
+        )
+      ''');
+
+      Map<String, String> workerInferredTask = {};
+      for (var row in taskCountResults.rows) {
+        var tData = row.assoc();
+        String wId = tData['worker_id'] ?? '';
+        double air = double.tryParse(tData['air_sum'] ?? '0') ?? 0;
+        double clean = double.tryParse(tData['clean_sum'] ?? '0') ?? 0;
+        double swap = double.tryParse(tData['swap_sum'] ?? '0') ?? 0;
+
+        String bestTask = "清掃";
+        if (air > clean && air >= swap) {
+          bestTask = "エアー";
+        } else if (swap > clean && swap > air) {
+          bestTask = "筐体交換";
+        }
+        workerInferredTask[wId] = bestTask;
+      }
+
+      List<ActiveWorker> tempActiveWorkers = [];
+      for (var row in activeResults.rows) {
+        var data = row.assoc();
+        String wId = data['worker_id'] ?? '';
+        double startTs = double.tryParse(data['start_time'] ?? '0') ?? 0;
+        DateTime startTime = DateTime.fromMillisecondsSinceEpoch((startTs * 1000).toInt());
+        bool isPaused = (data['is_paused'] ?? '0') == '1';
+        
+        DateTime? pausedAt;
+        if (isPaused) {
+          double pausedTs = double.tryParse(data['paused_at'] ?? '0') ?? 0;
+          if (pausedTs > 0) {
+            pausedAt = DateTime.fromMillisecondsSinceEpoch((pausedTs * 1000).toInt());
+          }
+        }
+
+        tempActiveWorkers.add(ActiveWorker(
+          workerId: wId,
+          workerName: data['worker_name'] ?? (wId.isNotEmpty ? wId : '不明'),
+          startTime: startTime,
+          isPaused: isPaused,
+          pausedAt: pausedAt,
+          inferredTask: workerInferredTask[wId] ?? "清掃",
+        ));
+      }
+
+      // 開始時刻が新しい順に並べる
+      tempActiveWorkers.sort((a, b) => b.startTime.compareTo(a.startTime));
+      _activeWorkers = tempActiveWorkers;
+    } catch (e) {
+      print("🚨 稼働状況データ取得エラー: $e");
+    }
+  }
+
   Future<void> fetchAndAnalyze({bool silent = false}) async {
     if (!silent) {
       _isLoading = true;
@@ -1086,77 +1192,7 @@ class DataProvider extends ChangeNotifier {
       }
 
       // --- 🪑 8. 稼働状況（Active Workers）の取得 ---
-      try {
-        var activeResults = await conn.execute('''
-          SELECT a.worker_id, m.worker_name, a.start_time, a.is_paused, a.paused_at
-          FROM t_active_workers a
-          LEFT JOIN m_members m ON a.worker_id = m.worker_id
-        ''');
-
-        // 直近1週間のうち、各作業者の「一番最後（最新）の作業ログ」を取得して推測する
-        var taskCountResults = await conn.execute('''
-          SELECT worker_id, 
-                 IFNULL(air_clean_qty, 0) as air_sum,
-                 IFNULL(clean_qty, 0) as clean_sum,
-                 IFNULL(swap_qty, 0) as swap_sum
-          FROM unit_cleaning_logs
-          WHERE id IN (
-            SELECT MAX(id)
-            FROM unit_cleaning_logs
-            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-            GROUP BY worker_id
-          )
-        ''');
-
-        Map<String, String> workerInferredTask = {};
-        for (var row in taskCountResults.rows) {
-          var tData = row.assoc();
-          String wId = tData['worker_id'] ?? '';
-          double air = double.tryParse(tData['air_sum'] ?? '0') ?? 0;
-          double clean = double.tryParse(tData['clean_sum'] ?? '0') ?? 0;
-          double swap = double.tryParse(tData['swap_sum'] ?? '0') ?? 0;
-
-          String bestTask = "清掃";
-          if (air > clean && air >= swap) {
-            bestTask = "エアー";
-          } else if (swap > clean && swap > air) {
-            bestTask = "筐体交換";
-          }
-          workerInferredTask[wId] = bestTask;
-        }
-
-        List<ActiveWorker> tempActiveWorkers = [];
-        for (var row in activeResults.rows) {
-          var data = row.assoc();
-          String wId = data['worker_id'] ?? '';
-          double startTs = double.tryParse(data['start_time'] ?? '0') ?? 0;
-          DateTime startTime = DateTime.fromMillisecondsSinceEpoch((startTs * 1000).toInt());
-          bool isPaused = (data['is_paused'] ?? '0') == '1';
-          
-          DateTime? pausedAt;
-          if (isPaused) {
-            double pausedTs = double.tryParse(data['paused_at'] ?? '0') ?? 0;
-            if (pausedTs > 0) {
-              pausedAt = DateTime.fromMillisecondsSinceEpoch((pausedTs * 1000).toInt());
-            }
-          }
-
-          tempActiveWorkers.add(ActiveWorker(
-            workerId: wId,
-            workerName: data['worker_name'] ?? (wId.isNotEmpty ? wId : '不明'),
-            startTime: startTime,
-            isPaused: isPaused,
-            pausedAt: pausedAt,
-            inferredTask: workerInferredTask[wId] ?? "清掃",
-          ));
-        }
-
-        // 開始時刻が新しい順に並べる
-        tempActiveWorkers.sort((a, b) => b.startTime.compareTo(a.startTime));
-        _activeWorkers = tempActiveWorkers;
-      } catch (e) {
-        print("🚨 稼働状況データ取得エラー: $e");
-      }
+      await _fetchActiveWorkers(conn);
 
       _isLoading = false;
       _errorMessage = null;

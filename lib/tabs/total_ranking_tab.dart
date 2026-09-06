@@ -295,13 +295,13 @@ class _TotalRankingTabState extends State<TotalRankingTab> {
     }
 
     return Scaffold(
-      backgroundColor: data.currentBgColor,
+      backgroundColor: Colors.transparent,
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Container(
           padding: const EdgeInsets.all(25),
           decoration: BoxDecoration(
-            color: data.currentCardColor,
+            color: isWhite ? data.currentCardColor : data.currentCardColor.withOpacity(0.65),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: data.borderColor),
             boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 3))] : null,

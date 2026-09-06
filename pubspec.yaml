@@ -55,9 +55,22 @@ flutter:
     - assets/videos/splash_logo.mp4
     - assets/app_icon.png
     - assets/mascot.png
+    - assets/mascot_fight.jpg
+    - assets/mascot_good_pace.jpg
+    - assets/mascot_excellent.jpg
     - assets/mascot_kansai.jpg
     - assets/mascot_coach.jpg
     - assets/mascot_butler.jpg
+    - assets/menu_personal_stats.jpg
+    - assets/menu_unit_cleaning.jpg
+    - assets/menu_data_edit.jpg
+    - assets/menu_data_view.jpg
+    - assets/menu_goal_list.jpg
+    - assets/menu_schedule.jpg
+    - assets/menu_productivity.jpg
+    - assets/menu_seating_chart.jpg
+    - assets/menu_database_settings.jpg
+    - assets/menu_display_settings.jpg
     - assets/frame_wood.png
     - assets/frame_iron.png
     - assets/frame_bronze.png
@@ -69,4 +82,6 @@ flutter:
     - assets/nameplate_silver.png
     - assets/nameplate_gold.png
     - assets/nameplate_gold_wide.png
+    - assets/bg_glassmorphism.jpg
+    - assets/bg_tech_abstract.jpg
   uses-material-design: true

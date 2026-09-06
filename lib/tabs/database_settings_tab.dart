@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:mysql_client/mysql_client.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 import 'member_add_scanner_page.dart';
 import 'model_add_scanner_page.dart';
 import '../pages/member_add_nfc_page.dart';
@@ -457,17 +458,22 @@ class _DatabaseSettingsTabState extends State<DatabaseSettingsTab> {
     final dp = context.watch<DataProvider>();
     final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
-    return Scaffold(
-      backgroundColor: dp.currentBgColor,
-      appBar: AppBar(
-        backgroundColor: dp.currentCardColor,
-        elevation: isWhite ? 2 : 0,
-        title: Text(
-          "データベース運用設定",
-          style: TextStyle(fontWeight: FontWeight.bold, color: dp.mainTextColor),
+    return AppBackgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor:
+              dp.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
+          elevation: isWhite ? 2 : 0,
+          title: Text(
+            "データベース運用設定",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: dp.mainTextColor,
+            ),
+          ),
+          iconTheme: IconThemeData(color: dp.mainTextColor),
         ),
-        iconTheme: IconThemeData(color: dp.mainTextColor),
-      ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent))
           : _errorMsg.isNotEmpty
@@ -683,7 +689,7 @@ class _DatabaseSettingsTabState extends State<DatabaseSettingsTab> {
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text("データを追加", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
-    );
+    ));
   }
 
   // 画面全体(中央)に大きく成功メッセージを表示する共通メソッド
@@ -728,7 +734,7 @@ class _DatabaseSettingsTabState extends State<DatabaseSettingsTab> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: dp.currentCardColor,
+        color: dp.currentCardColor.withValues(alpha: isWhite ? 0.90 : 0.78),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: dp.borderColor),
         boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 3))] : null,

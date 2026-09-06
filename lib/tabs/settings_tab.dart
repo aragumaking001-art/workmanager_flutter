@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
@@ -10,19 +11,28 @@ class SettingsTab extends StatelessWidget {
     final dp = context.watch<DataProvider>();
     final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
-    return Scaffold(
-      backgroundColor: dp.currentBgColor,
-      appBar: AppBar(
-        backgroundColor: dp.currentCardColor,
-        elevation: isWhite ? 2 : 0,
-        iconTheme: IconThemeData(color: dp.mainTextColor),
-        title: Text("画面表示・カラーモード設定", style: TextStyle(color: dp.mainTextColor, fontWeight: FontWeight.bold, fontSize: 24)),
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, size: 28, color: dp.mainTextColor),
-          onPressed: () => Navigator.pop(context),
+    return AppBackgroundWrapper(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor:
+              dp.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
+          elevation: isWhite ? 2 : 0,
+          iconTheme: IconThemeData(color: dp.mainTextColor),
+          title: Text(
+            "画面表示・カラーモード設定",
+            style: TextStyle(
+              color: dp.mainTextColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 24,
+            ),
+          ),
+          centerTitle: true,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, size: 28, color: dp.mainTextColor),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
-      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
@@ -117,7 +127,7 @@ class SettingsTab extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _buildModeCard({

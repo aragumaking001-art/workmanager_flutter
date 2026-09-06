@@ -4,6 +4,7 @@ import 'package:intl/intl.dart' show NumberFormat, DateFormat;
 import 'dart:math' as math;
 import 'dart:async';
 import '../providers/data_provider.dart';
+import '../widgets/app_background_wrapper.dart';
 
 class PersonalStatsTab extends StatefulWidget {
   final String? initialWorkerId;
@@ -59,12 +60,12 @@ class _PersonalStatsTabState extends State<PersonalStatsTab>
     final workers = dataProvider.workerStatsMap.values.toList();
     workers.sort((a, b) => b.level.compareTo(a.level));
 
-    return Scaffold(
-      backgroundColor: dataProvider.currentBgColor,
-      appBar: widget.isKioskMode
-          ? null
-          : AppBar(
-              backgroundColor: dataProvider.currentCardColor,
+    final scaffold = Scaffold(
+      backgroundColor: Colors.transparent,
+        appBar: widget.isKioskMode
+            ? null
+            : AppBar(
+                backgroundColor: dataProvider.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
               elevation: isWhite ? 2 : 0,
               iconTheme: IconThemeData(color: dataProvider.mainTextColor),
               title: Text(
@@ -90,7 +91,7 @@ class _PersonalStatsTabState extends State<PersonalStatsTab>
               flex: 3,
               child: Container(
                 decoration: BoxDecoration(
-                  color: dataProvider.currentCardColor,
+                  color: dataProvider.currentCardColor.withValues(alpha: isWhite ? 0.85 : 0.65),
                   border: Border(
                     right: BorderSide(color: dataProvider.borderColor),
                   ),
@@ -233,7 +234,7 @@ class _PersonalStatsTabState extends State<PersonalStatsTab>
           Expanded(
             flex: widget.isKioskMode ? 10 : 7,
             child: Container(
-              color: dataProvider.currentBgColor,
+              color: Colors.transparent,
               child: _selectedWorker == null
                   ? Center(
                       child: Text(
@@ -256,6 +257,11 @@ class _PersonalStatsTabState extends State<PersonalStatsTab>
         ],
       ),
     );
+
+    if (widget.isKioskMode) {
+      return scaffold;
+    }
+    return AppBackgroundWrapper(child: scaffold);
   }
 
   Widget _buildMainContent(DataProvider provider, bool isWhite) {
