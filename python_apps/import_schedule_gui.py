@@ -167,12 +167,12 @@ class App(ctk.CTk):
                 for col_idx, target_date in dates.items():
                     plan_val = ws.cell(row=row_idx, column=col_idx).value
                     if plan_val is None or str(plan_val).strip() == "":
-                        continue
-                        
-                    try:
-                        plan_count = int(float(str(plan_val).strip()))
-                    except ValueError:
-                        continue
+                        plan_count = 0
+                    else:
+                        try:
+                            plan_count = int(float(str(plan_val).strip()))
+                        except ValueError:
+                            continue
                         
                     # マスター(m_models)の登録状況をチェック
                     cursor.execute('''
@@ -278,12 +278,13 @@ class App(ctk.CTk):
                         ''', (plan_count, now, existing['id']))
                         update_count += 1
                     else:
-                        cursor.execute('''
-                            INSERT INTO t_schedules 
-                            (target_date, model_name, maker_name, plan_count, actual_count, created_at, updated_at) 
-                            VALUES (%s, %s, %s, %s, 0, %s, %s)
-                        ''', (target_date, model_name, maker_name, plan_count, now, now))
-                        insert_count += 1
+                        if plan_count > 0:
+                            cursor.execute('''
+                                INSERT INTO t_schedules 
+                                (target_date, model_name, maker_name, plan_count, actual_count, created_at, updated_at) 
+                                VALUES (%s, %s, %s, %s, 0, %s, %s)
+                            ''', (target_date, model_name, maker_name, plan_count, now, now))
+                            insert_count += 1
                         
             # Flutterアプリ側に更新を通知するため、trackerを更新する
             cursor.execute("UPDATE data_update_tracker SET last_updated = CURRENT_TIMESTAMP WHERE id = 1")
