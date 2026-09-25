@@ -49,17 +49,23 @@ WorkManagerは、現場でのデータ入力から進捗管理、スケジュー
 |---|---|---|---|
 | **work_app.py** | Python (GUI/SQLite) | 現場作業員 | 清掃・整備データの高速入力。ネットワーク切断時も完全オフラインで入力可能。 |
 | **dashboard_workplace.py** | Python (Flet/Matplotlib) | 現場作業員/リーダー | 現場全体のリアルタイム進捗画面。SQLiteからMariaDBへの自動同期およびスケジュール自動連動バッチ。 |
-| **workmanager_flutter (キオスク)** | Flutter (Win: 13.3型ワイド) | 現場作業員 | NFCカードタッチによる「個人実績」「レーダーチャート」「レベル/称号」「AI分析」の瞬時全画面表示。 |
-| **workmanager_flutter (管理者/SV)** | Flutter (Android: 10型 / Win) | SV・管理者 | 日別/機種別スケジュール管理、Excelインポート（ScheduleImporter）、データ修正・削除、稼働状況（座席表）。 |
+| **workmanager_flutter (キオスク)** | Flutter (Win: 13.3型ワイド) | 現場作業員 | NFCカードタッチによる「個人実績」「レーダーチャート」「レベル/称号」「AI分析」の瞬時全画面表示。30秒放置でデジタルサイネージ起動。 |
+| **workmanager_flutter (管理者/SV)** | Flutter (Android: 10型 / Win) | SV・管理者 | 日別/機種別スケジュール管理、Excelインポート（ScheduleImporter）、データ修正・削除、稼働状況（座席表）、異常検知状況確認。 |
+| **anomaly_lamp_daemon.py / .exe** | Python / Standalone EXE | 常駐プロセス | 中央DBの異常作業データ (`anomaly_flag != 0`) を常時監視し、Tapo P105 (`192.168.10.178`) 赤色回転灯を自動ON/OFF制御。 |
 | **ai_analyzer.py / nfc_server.py** | Python | システム | 作業実績のAI自然言語フィードバック生成、NFCカードID読み取り・QR変換サーバー。 |
 
 ---
 
-## 4. IPアドレスによるFlutterアプリの動作モード判定
+## 4. IPアドレスによるFlutterアプリの動作モード判定 & ネットワーク割り当て
 `main.dart` 起動時、自身のローカルIPアドレスを判別して自動で画面モードを切り替えます。
+- **`192.168.10.101`**: **中央MariaDBサーバー (work_manager_db)**
 - **`192.168.10.102`**: **キオスクモード (`AppMode.kiosk`)**（全画面・カードタッチ待機）
 - **`192.168.10.103` / `150` / `151` / `152`**: **管理者モード (`AppMode.administrator`)**（全機能・DB運用設定利用可）
-- **その他のIP**: **マネージャーモード (`AppMode.manager`)**（閲覧・スケジュール管理等）
+  - `192.168.10.103`: SV/管理者用 Androidタブレット (0019F262102981 - 静的IP)
+  - `192.168.10.111`: SV/管理者用 Androidタブレット (KB10046100501222 - 静的IP)
+- **`192.168.10.178`**: **Tapo P105 スマートプラグ（異常検知パトランプ）**
+- **その他のIP (`192.168.10.161`〜)**: **マネージャーモード (`AppMode.manager`)**（閲覧・スケジュール管理等）
+※Androidタブレットは2時間DHCPリース切れ切断を防ぐため、Wi-Fi設定で「静的IP (valid_lft forever)」に設定して運用すること。
 
 ---
 
@@ -67,7 +73,7 @@ WorkManagerは、現場でのデータ入力から進捗管理、スケジュー
 
 | テーブル名 | 用途 | 重要なカラム・挙動 |
 |---|---|---|
-| **`unit_cleaning_logs`** | 清掃実績ログ | 実績メインテーブル（作業者ID, 機種名, メーカー名, air/clean/swap台数, 日時等）。 |
+| **`unit_cleaning_logs`** | 清掃実績ログ | 実績メインテーブル（作業者ID, 機種名, メーカー名, air/clean/swap台数, 日時, `anomaly_flag` 等）。 |
 | **`t_schedules`** | 清掃スケジュール | 日程・機種ごとの予定と実績（`target_date`, `model_name`, `maker_name`, `plan_count`, `actual_count`）。 |
 | **`t_model_schedules`** | 機種別作業累計 | 機種・メーカーごとの `air_count`, `clean_count`, `swap_count`, `total_count` の累計。 |
 | **`m_models`** | 機種マスタ | 機種名、メーカー名、標準作業時間（目標時間）、機種特性などを管理。 |
