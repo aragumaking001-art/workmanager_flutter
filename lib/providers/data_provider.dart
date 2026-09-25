@@ -48,44 +48,43 @@ class WorkerStats {
   }
 
   double get qualityScore {
-    int hAir = air + toClean;
-    int hClean = clean + toSwap;
-    // 💡 筐体交換（swap）は不良率の概念がないため品質スコアの評価から除外する
-    int totalHandled = hAir + hClean;
+    // 💡 案1（現場実態に即した公平評価）：
+    // エアー清掃は現場運用上NG（清掃行き）をカウントしておらず実質0台入力のため、
+    // エアー台数で清掃スコアを加重平均するとエアー作業員が無条件で満点になる不公平が生じる。
+    // したがって、清掃実績がある作業者は「清掃における筐体交換行き率（現場平均約9.6%）」を基準に公正評価する。
+    int totalClean = clean + toSwap;
 
-    if (totalHandled == 0) return 0.0;
+    if (totalClean > 0) {
+      double swapRate = toSwap / totalClean; // 筐体交換行き率 (案B基準)
 
-    double airScore = 0.0;
-    if (hAir > 0) {
-      double rate = air / hAir;
-      if (rate >= 0.40) {
-        airScore = 1.0;
-      } else if (rate >= 0.30) {
-        airScore = 0.75 + ((rate - 0.30) / 0.10) * 0.25;
+      if (swapRate <= 0.05) {
+        // 交換行き率 5%以下: 極めて高品質 (Sランク: 100点)
+        return 1.0;
+      } else if (swapRate <= 0.10) {
+        // 交換行き率 5%〜10% (現場平均ライン): Aランク標準〜優秀 (90点〜100点)
+        return 0.90 + ((0.10 - swapRate) / 0.05) * 0.10;
+      } else if (swapRate <= 0.15) {
+        // 交換行き率 10%〜15%: Bランク良品 (80点〜90点)
+        return 0.80 + ((0.15 - swapRate) / 0.05) * 0.10;
+      } else if (swapRate <= 0.20) {
+        // 交換行き率 15%〜20%: Cランク (70点〜80点)
+        return 0.70 + ((0.20 - swapRate) / 0.05) * 0.10;
       } else {
-        airScore = (rate / 0.30) * 0.75;
+        // 交換行き率 20%超: 減点カーブ (最低0.40でクランプ)
+        return (0.70 - (swapRate - 0.20) * 1.5).clamp(0.40, 1.0);
       }
+    } else if (air > 0 || swap > 0) {
+      // 清掃実績がなくエアー専任または筐体交換専任の作業者:
+      // NG判定のない工程を滞りなく完結しているため、標準のAランク(90点)を付与
+      return 0.90;
+    } else {
+      // 実績なし
+      return 0.0;
     }
-
-    double cleanScore = 0.0;
-    if (hClean > 0) {
-      double rate = clean / hClean;
-      if (rate >= 1.0) {
-        cleanScore = 1.0;
-      } else if (rate >= 0.95) {
-        cleanScore = 0.75 + ((rate - 0.95) / 0.05) * 0.25;
-      } else {
-        cleanScore = (rate / 0.95) * 0.75;
-      }
-    }
-
-    double finalScore = ((airScore * hAir) + (cleanScore * hClean)) / totalHandled;
-    // 💡 全体的にワンランクアップするように1.25倍（0.8で満点）してクランプ
-    return (finalScore * 1.25).clamp(0.0, 1.0);
   }
 
   // 💡 ベーススコアは Aランクの基準（1.0）でクランプする（レーダーの図形が枠を突き破らないように）
-  double get techScore => (uniqueModels / 25.0).clamp(0.0, 1.0); // A=25機種 (C=15機種)
+  double get techScore => (uniqueModels / 15.0).clamp(0.0, 1.0); // A=15機種 (B=12機種, C=9機種, S=18機種)
   double get staminaScore => (workMinutes / (60 * 2000.0)).clamp(0.0, 1.0); // A=2000時間
   double get contributionScore => (earnedPoints / 200000.0).clamp(0.0, 1.0); // A=20万pt
 
@@ -104,7 +103,7 @@ class WorkerStats {
     // 2. スペシャリスト
     if (level >= 100) return "4Fの守護神";
     if (speedScore >= 1.2 && qualityScore >= 0.9) return "熟練のスピードスター";
-    if (techScore >= 25.0 / 30.0) return "百戦錬磨の匠";
+    if (techScore >= 1.0) return "百戦錬磨の匠";
     if (contributionScore >= 1.0) return "センターの柱"; 
     
     // 3. 成長度合い
@@ -146,8 +145,8 @@ class WorkerStats {
   }
 
   String get techRank {
-    // 機種マスター (A=25機種, C=15機種, S=28機種, SS=30機種)
-    return _calcRank(uniqueModels / 25.0, sRatio: 28.0 / 25.0, ssRatio: 30.0 / 25.0);
+    // 機種マスター (A=15機種, S=18機種, SS=20機種)
+    return _calcRank(uniqueModels / 15.0, sRatio: 18.0 / 15.0, ssRatio: 20.0 / 15.0);
   }
 
   String get staminaRank {
@@ -323,6 +322,11 @@ class DataProvider extends ChangeNotifier {
   List<Map<String, String>> _masterModelsList = [];
   List<Map<String, String>> get masterModelsList => _masterModelsList;
 
+  // ⚠️ 異常フラグ（作業時間3分未満/12時間以上/台数1001台以上）データ
+  List<Map<String, dynamic>> _anomalyLogs = [];
+  List<Map<String, dynamic>> get anomalyLogs => _anomalyLogs;
+  int get anomalyCount => _anomalyLogs.length;
+
   bool _isLoading = false;
   bool _isCheckingUpdates = false;
   String? _lastTimestamp;
@@ -426,6 +430,26 @@ class DataProvider extends ChangeNotifier {
   List<ActiveWorker> get activeWorkers => _activeWorkers;
   Map<String, WorkerStats> get workerStatsMap => _workerStatsMap;
   bool get isLoading => _isLoading;
+
+  /// 機種名・メーカー名から通常清掃の作業標準台数 (台/h) を取得する
+  double getStandardCleanRate(String modelName, String makerName) {
+    // 1. model + maker 完全一致
+    for (var m in _masterModelsList) {
+      if (m['model_name'] == modelName && m['maker_name'] == makerName) {
+        double? rate = double.tryParse(m['std_clean'] ?? '');
+        if (rate != null && rate > 0) return rate;
+      }
+    }
+    // 2. model のみ一致
+    for (var m in _masterModelsList) {
+      if (m['model_name'] == modelName) {
+        double? rate = double.tryParse(m['std_clean'] ?? '');
+        if (rate != null && rate > 0) return rate;
+      }
+    }
+    // 3. デフォルト 10.0 台/h (1台あたり6分)
+    return 10.0;
+  }
 
   void setRankingPeriod(DateTime start, DateTime end) {
     _rankStartDate = start;
@@ -535,6 +559,7 @@ class DataProvider extends ChangeNotifier {
       await conn.execute(
         'UPDATE data_update_tracker SET last_updated = NOW() WHERE id = 1',
       );
+      await _fetchAnomalyLogs(conn);
       await conn.close();
 
       if (!isOnline) {
@@ -572,6 +597,7 @@ class DataProvider extends ChangeNotifier {
       await conn.execute(
         'UPDATE data_update_tracker SET last_updated = NOW() WHERE id = 1',
       );
+      await _fetchAnomalyLogs(conn);
       await conn.close();
 
       if (!isOnline) {
@@ -587,6 +613,63 @@ class DataProvider extends ChangeNotifier {
         isOnline = false;
         notifyListeners();
       }
+      return false;
+    }
+  }
+
+  /// 💡 異常データ一覧のみを最新状態に再取得
+  Future<void> fetchAnomalyLogsOnly() async {
+    try {
+      final conn = await MySQLConnection.createConnection(
+        host: '192.168.10.101',
+        port: 3306,
+        userName: 'work_user',
+        password: 'work1234',
+        databaseName: 'work_manager_db',
+      );
+      await conn.connect();
+      await conn.execute("SET time_zone = '+09:00'");
+      await _fetchAnomalyLogs(conn);
+      await conn.close();
+
+      if (!isOnline) {
+        isOnline = true;
+      }
+      notifyListeners();
+    } catch (e) {
+      print("🚨 異常フラグ単体取得エラー: $e");
+    }
+  }
+
+  /// 💡 異常フラグを「問題なし（正常）」として承認・解除
+  Future<bool> resolveAnomalyFlag(int logId) async {
+    try {
+      final conn = await MySQLConnection.createConnection(
+        host: '192.168.10.101',
+        port: 3306,
+        userName: 'work_user',
+        password: 'work1234',
+        databaseName: 'work_manager_db',
+      );
+      await conn.connect();
+      await conn.execute(
+        "UPDATE unit_cleaning_logs SET anomaly_flag = 0 WHERE id = :id",
+        {"id": logId},
+      );
+      await conn.execute(
+        'UPDATE data_update_tracker SET last_updated = NOW() WHERE id = 1',
+      );
+      await _fetchAnomalyLogs(conn);
+      await conn.close();
+
+      if (!isOnline) {
+        isOnline = true;
+      }
+      notifyListeners();
+      fetchAndAnalyze(silent: true);
+      return true;
+    } catch (e) {
+      print("🚨 異常フラグ解除エラー: $e");
       return false;
     }
   }
@@ -739,6 +822,46 @@ class DataProvider extends ChangeNotifier {
       _activeWorkers = tempActiveWorkers;
     } catch (e) {
       print("🚨 稼働状況データ取得エラー: $e");
+    }
+  }
+
+  /// 💡 異常フラグ（anomaly_flag != 0）データ取得ヘルパー
+  Future<void> _fetchAnomalyLogs(MySQLConnection conn) async {
+    try {
+      var res = await conn.execute('''
+        SELECT 
+          l.id,
+          DATE_FORMAT(l.work_date, '%Y/%m/%d') AS work_date,
+          l.worker_id,
+          IFNULL(m.worker_name, l.worker_id) AS worker_name,
+          l.model_name,
+          IFNULL(l.maker, '') AS maker,
+          IFNULL(l.maker_abbr, '') AS maker_abbr,
+          IFNULL(l.air_clean_qty, 0) AS air_clean_qty,
+          IFNULL(l.clean_qty, 0) AS clean_qty,
+          IFNULL(l.swap_qty, 0) AS swap_qty,
+          IFNULL(l.to_clean_qty, 0) AS to_clean_qty,
+          IFNULL(l.to_swap_qty, 0) AS to_swap_qty,
+          IFNULL(l.std_qty, 10.0) AS std_qty,
+          IFNULL(l.start_time_str, '') AS start_time_str,
+          IFNULL(l.end_time_str, '') AS end_time_str,
+          IFNULL(l.work_minutes, 0.0) AS work_minutes,
+          IFNULL(l.edit_count, 0) AS edit_count,
+          IFNULL(l.anomaly_flag, 0) AS anomaly_flag,
+          DATE_FORMAT(l.created_at, '%Y/%m/%d %H:%i') AS created_at_str
+        FROM unit_cleaning_logs l
+        LEFT JOIN m_members m ON l.worker_id = m.worker_id
+        WHERE l.anomaly_flag != 0
+        ORDER BY l.id DESC
+      ''');
+
+      List<Map<String, dynamic>> temp = [];
+      for (var row in res.rows) {
+        temp.add(row.assoc());
+      }
+      _anomalyLogs = temp;
+    } catch (e) {
+      print("🚨 異常フラグデータ取得エラー: $e");
     }
   }
 
@@ -1170,7 +1293,8 @@ class DataProvider extends ChangeNotifier {
             model_name, 
             IFNULL(maker_abbr, '') AS maker_name, 
             MIN(sort_order) AS sort_id,
-            MAX(category) AS category
+            MAX(category) AS category,
+            MAX(CASE WHEN work_type IN ('清掃', '通常清掃') THEN std_qty END) AS std_clean
           FROM m_models
           GROUP BY model_name, maker_name
           ORDER BY sort_id ASC
@@ -1184,6 +1308,7 @@ class DataProvider extends ChangeNotifier {
             'maker_name': data['maker_name']?.toString() ?? '',
             'csv_id': data['sort_id']?.toString() ?? '9999',
             'category': data['category']?.toString() ?? '',
+            'std_clean': data['std_clean']?.toString() ?? '10.0',
           });
         }
         _masterModelsList = tempMasterModels;
@@ -1193,6 +1318,9 @@ class DataProvider extends ChangeNotifier {
 
       // --- 🪑 8. 稼働状況（Active Workers）の取得 ---
       await _fetchActiveWorkers(conn);
+
+      // --- ⚠️ 9. 異常フラグ（anomaly_flag != 0）データの取得 ---
+      await _fetchAnomalyLogs(conn);
 
       _isLoading = false;
       _errorMessage = null;

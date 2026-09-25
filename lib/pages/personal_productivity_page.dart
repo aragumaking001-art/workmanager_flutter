@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../main.dart';
 import '../providers/data_provider.dart';
 import '../widgets/app_background_wrapper.dart';
+import '../widgets/anomaly_status_indicator.dart';
 
 class PersonalProductivityPage extends StatefulWidget {
   final String? initialWorkerId;
@@ -193,6 +194,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
             "earned_minutes": 0.0, 
             "total_air": 0,
             "total_clean": 0,
+            "total_swap": 0,
             "total_to_swap": 0,
           };
         }
@@ -206,6 +208,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
         agg[aggKey]!["total_minutes"] += minutes;
         agg[aggKey]!["total_air"] = (agg[aggKey]!["total_air"] as int) + a;
         agg[aggKey]!["total_clean"] = (agg[aggKey]!["total_clean"] as int) + c;
+        agg[aggKey]!["total_swap"] = (agg[aggKey]!["total_swap"] as int) + s;
         agg[aggKey]!["total_to_swap"] = (agg[aggKey]!["total_to_swap"] as int) + toSwap;
       }
 
@@ -220,7 +223,8 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
         int totAir = e["total_air"] ?? 0;
         int totClean = e["total_clean"] ?? 0;
         int totToSwap = e["total_to_swap"] ?? 0;
-        double swapRate = (totAir + totClean) > 0 ? (totToSwap / (totAir + totClean) * 100.0) : 0.0;
+        int cleanBase = totClean + totToSwap;
+        double swapRate = cleanBase > 0 ? (totToSwap / cleanBase * 100.0) : 0.0;
         e["swap_rate"] = swapRate;
       });
 
@@ -788,21 +792,115 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
     return totalWeightedAchieve / totalTime;
   }
 
+  double get _totalWorkMinutes {
+    if (_aggregatedData.isEmpty) return 0.0;
+    double totalTime = 0.0;
+    for (var item in _aggregatedData) {
+      totalTime += (item['total_minutes'] ?? 0.0).toDouble();
+    }
+    return totalTime;
+  }
+
+  String get _totalWorkTimeDisplay {
+    int totalMin = _totalWorkMinutes.round();
+    if (totalMin <= 0) return "0分";
+
+    // 1年 = 12か月 = 240日 = 1680時間 = 100800分 (現場勤務時間ベース: 1日7時間)
+    if (totalMin >= 100800) {
+      int years = totalMin ~/ 100800;
+      int remMin = totalMin % 100800;
+      int months = remMin ~/ 8400;
+      if (months > 0) {
+        return "約$years年$monthsか月";
+      } else {
+        return "約$years年";
+      }
+    }
+
+    // 1か月 = 20日 = 140時間 = 8400分 (現場勤務時間ベース: 1日7時間)
+    if (totalMin >= 8400) {
+      double months = totalMin / 8400.0;
+      String mStr = months.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '');
+      return "約$mStrか月";
+    }
+
+    // 1日 = 7時間 = 420分
+    if (totalMin >= 420) {
+      int days = totalMin ~/ 420;
+      int remMin = totalMin % 420;
+      int hours = remMin ~/ 60;
+      if (hours > 0) {
+        return "約$days日$hours時間";
+      } else {
+        return "約$days日";
+      }
+    }
+
+    // 1日未満 (7時間未満)
+    int h = totalMin ~/ 60;
+    int m = totalMin % 60;
+    if (h > 0) {
+      return m > 0 ? "$h時間$m分" : "$h時間";
+    } else {
+      return "$m分";
+    }
+  }
+
   double get _totalSwapRate {
     if (_aggregatedData.isEmpty) return 0.0;
-    int totAir = 0;
     int totClean = 0;
     int totToSwap = 0;
     for (var item in _aggregatedData) {
       String type = item['work_type'] ?? '';
       int qty = item['total_qty'] ?? 0;
       int ts = item['total_to_swap'] ?? 0;
-      if (type == 'エアー清掃') totAir += qty;
       if (type == '清掃') totClean += qty;
       totToSwap += ts;
     }
-    if ((totAir + totClean) == 0) return 0.0;
-    return (totToSwap / (totAir + totClean)) * 100.0;
+    int cleanBase = totClean + totToSwap;
+    if (cleanBase == 0) return 0.0;
+    return (totToSwap / cleanBase) * 100.0;
+  }
+
+  String get _dominantWorkType {
+    if (_aggregatedData.isEmpty) return "清掃";
+
+    Map<String, int> qtyMap = {
+      "清掃": 0,
+      "エアー清掃": 0,
+      "筐体交換": 0,
+    };
+    Map<String, double> minMap = {
+      "清掃": 0.0,
+      "エアー清掃": 0.0,
+      "筐体交換": 0.0,
+    };
+
+    for (var item in _aggregatedData) {
+      String wt = item['work_type'] ?? "清掃";
+      int q = (item['total_qty'] as num?)?.toInt() ?? 0;
+      double m = (item['total_minutes'] as num?)?.toDouble() ?? 0.0;
+      qtyMap[wt] = (qtyMap[wt] ?? 0) + q;
+      minMap[wt] = (minMap[wt] ?? 0.0) + m;
+    }
+
+    String topType = "清掃";
+    int maxQty = -1;
+    double maxMinutes = -1.0;
+
+    for (var entry in qtyMap.entries) {
+      String type = entry.key;
+      int q = entry.value;
+      double m = minMap[type] ?? 0.0;
+
+      // 台数(total_qty)が多い区分を優先。同数の場合は作業時間(total_minutes)で判定
+      if (q > maxQty || (q == maxQty && m > maxMinutes)) {
+        maxQty = q;
+        maxMinutes = m;
+        topType = type;
+      }
+    }
+    return topType;
   }
 
   Widget _buildPersonalTab() {
@@ -810,12 +908,12 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
     final isWhite = dp.displayMode == DisplayMode.pureWhite;
 
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
       child: Column(
           children: [
             // フィルターエリア
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: dp.currentCardColor,
                 borderRadius: BorderRadius.circular(15),
@@ -868,7 +966,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isWhite ? const Color(0xFFD4EFFC) : const Color(0xFF0E384C),
                         foregroundColor: isWhite ? const Color(0xFF005580) : const Color(0xFF33D9FF),
-                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         side: BorderSide(color: isWhite ? const Color(0xFF0077AA) : const Color(0xFF00BAFF), width: 1.5),
                         elevation: isWhite ? 2 : 0,
@@ -885,7 +983,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isWhite ? const Color(0xFFE2F7EB) : const Color(0xFF0E3B27),
                       foregroundColor: isWhite ? const Color(0xFF006B33) : const Color(0xFF33FF99),
-                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 18),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       side: BorderSide(color: isWhite ? const Color(0xFF00994C) : const Color(0xFF00E673), width: 1.5),
                       elevation: isWhite ? 2 : 0,
@@ -898,7 +996,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isAllTime ? (isWhite ? const Color(0xFFD45500) : Colors.orangeAccent) : (isWhite ? const Color(0xFFFEECE2) : const Color(0xFF42210B)),
                       foregroundColor: _isAllTime ? (isWhite ? Colors.white : Colors.black) : (isWhite ? const Color(0xFFB53D00) : const Color(0xFFFF9A5C)),
-                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 22),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 22),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       side: BorderSide(color: _isAllTime ? Colors.transparent : (isWhite ? const Color(0xFFD45500) : Colors.orangeAccent), width: 1.5),
                       elevation: isWhite ? 2 : 0,
@@ -914,92 +1012,231 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
 
             Expanded(
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // 左側: 総合達成率の縦長パネル
                   if (!_isFetching && _aggregatedData.isNotEmpty && _selectedWorker != null)
-                    Container(
-                      width: 250,
-                      margin: const EdgeInsets.only(right: 20, bottom: 20),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 25),
-                      decoration: BoxDecoration(
-                        color: isWhite ? const Color(0xFF008855).withOpacity(0.12) : const Color(0xFF00FFCC).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC).withOpacity(0.5), width: isWhite ? 2 : 1),
-                      ),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.stars, color: isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC), size: 28),
-                                const SizedBox(width: 8),
-                                Text("総合達成率", style: TextStyle(color: dp.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
-                              ],
+                    Builder(
+                      builder: (context) {
+                        String dominantWorkType = _dominantWorkType;
+                        Color dominantTypeColor = isWhite ? Colors.grey.shade700 : Colors.grey;
+                        Color panelBgColor;
+
+                        if (dominantWorkType == "清掃") {
+                          dominantTypeColor = isWhite ? const Color(0xFF008855) : Colors.greenAccent;
+                          panelBgColor = isWhite ? const Color(0xFFEDF8F2) : const Color(0xFF00FF88).withOpacity(0.14);
+                        } else if (dominantWorkType == "エアー清掃") {
+                          dominantTypeColor = isWhite ? const Color(0xFF006688) : const Color(0xFF00CCFF);
+                          panelBgColor = isWhite ? const Color(0xFFEBF7FC) : const Color(0xFF00CCFF).withOpacity(0.16);
+                        } else if (dominantWorkType == "筐体交換") {
+                          dominantTypeColor = isWhite ? const Color(0xFFD45500) : Colors.orangeAccent;
+                          panelBgColor = isWhite ? const Color(0xFFFFF4EB) : const Color(0xFFFF8800).withOpacity(0.16);
+                        } else {
+                          panelBgColor = isWhite ? const Color(0xFF008855).withOpacity(0.12) : const Color(0xFF00FFCC).withOpacity(0.1);
+                          dominantTypeColor = isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC);
+                        }
+
+                        return Container(
+                          width: 255,
+                          margin: const EdgeInsets.only(right: 16, bottom: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: panelBgColor,
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(
+                              color: isWhite ? dominantTypeColor.withOpacity(0.7) : dominantTypeColor.withOpacity(0.8),
+                              width: 2.0,
                             ),
-                            const SizedBox(height: 10),
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.4),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
+                            boxShadow: isWhite ? [
+                              BoxShadow(
+                                color: dominantTypeColor.withOpacity(0.12),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              )
+                            ] : null,
+                          ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final double targetHeight = constraints.maxHeight > 460 ? constraints.maxHeight : 460;
+
+                              return Center(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.center,
+                                  child: SizedBox(
+                                    width: 235,
+                                    height: targetHeight,
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                      children: [
+                                        // 1. タイトル ＋ 作業区分バッジ
+                                        Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(Icons.stars, color: dominantTypeColor, size: 26),
+                                                const SizedBox(width: 8),
+                                                Text("総合達成率", style: TextStyle(color: dp.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 5),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  "最多作業:",
+                                                  style: TextStyle(
+                                                    color: isWhite ? const Color(0xFF4B5563) : dp.subTextColor,
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2.5),
+                                                  decoration: BoxDecoration(
+                                                    color: isWhite ? Colors.white.withOpacity(0.9) : dominantTypeColor.withOpacity(0.2),
+                                                    borderRadius: BorderRadius.circular(6),
+                                                    border: Border.all(color: dominantTypeColor, width: 1.5),
+                                                  ),
+                                                  child: Text(
+                                                    dominantWorkType,
+                                                    style: TextStyle(color: dominantTypeColor, fontSize: 13, fontWeight: FontWeight.bold),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+
+                                        // 2. マスコットキャラクター（どーんと大きく！）
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.35),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ],
+                                          ),
+                                          child: ClipOval(
+                                            child: Image.asset(
+                                              _totalAchievementRate >= 100 
+                                                  ? 'assets/mascot_excellent.jpg' 
+                                                  : (_totalAchievementRate >= 80 
+                                                      ? 'assets/mascot_good_pace.jpg' 
+                                                      : 'assets/mascot_fight.jpg'),
+                                              width: 140,
+                                              height: 140,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        ),
+
+                                        // 3. 達成率数値 ＋ 作業時間チップ
+                                        Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              "${_totalAchievementRate.toStringAsFixed(1)}%",
+                                              style: TextStyle(
+                                                color: _totalAchievementRate >= 100 
+                                                    ? (isWhite ? const Color(0xFF008855) : Colors.greenAccent) 
+                                                    : (_totalAchievementRate >= 80 
+                                                        ? (isWhite ? const Color(0xFFD45500) : Colors.orangeAccent) 
+                                                        : (isWhite ? Colors.red.shade700 : Colors.redAccent)),
+                                                fontSize: 42,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: -0.5,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                                                decoration: BoxDecoration(
+                                                  color: isWhite ? Colors.white.withOpacity(0.9) : Colors.white.withOpacity(0.08),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: isWhite ? dominantTypeColor.withOpacity(0.4) : dominantTypeColor.withOpacity(0.3),
+                                                    width: 1.2,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.schedule,
+                                                      size: 17,
+                                                      color: isWhite ? dominantTypeColor : const Color(0xFF00CCFF),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      "作業時間: $_totalWorkTimeDisplay",
+                                                      style: TextStyle(
+                                                        color: dp.mainTextColor,
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+
+                                        // 4. 区切り線
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                                          child: Container(height: 1.5, width: double.infinity, color: dp.borderColor),
+                                        ),
+
+                                        // 5. 筐体交換行き率表示
+                                        Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(Icons.verified_outlined, color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent, size: 22),
+                                                  const SizedBox(width: 6),
+                                                  Text("筐体交換行き率", style: TextStyle(color: dp.mainTextColor, fontSize: 17, fontWeight: FontWeight.bold)),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              "${_totalSwapRate.toStringAsFixed(1)}%",
+                                              style: TextStyle(
+                                                color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent,
+                                                fontSize: 34,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ],
-                              ),
-                              child: ClipOval(
-                                child: Image.asset(
-                                  _totalAchievementRate >= 100 
-                                      ? 'assets/mascot_excellent.jpg' 
-                                      : (_totalAchievementRate >= 80 
-                                          ? 'assets/mascot_good_pace.jpg' 
-                                          : 'assets/mascot_fight.jpg'),
-                                  width: 120, // 140から少し縮小してキオスクでも収まるように
-                                  height: 120,
-                                  fit: BoxFit.cover,
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              "${_totalAchievementRate.toStringAsFixed(1)}%",
-                              style: TextStyle(
-                                color: _totalAchievementRate >= 100 ? (isWhite ? const Color(0xFF008855) : Colors.greenAccent) : (_totalAchievementRate >= 80 ? (isWhite ? const Color(0xFFD45500) : Colors.orangeAccent) : (isWhite ? Colors.red.shade700 : Colors.redAccent)),
-                                fontSize: 46,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Container(height: 2, width: double.infinity, color: dp.borderColor),
-                            const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.verified_outlined, color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent, size: 28),
-                                const SizedBox(width: 8),
-                                Text("不良率", style: TextStyle(color: dp.mainTextColor, fontSize: 22, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              "${_totalSwapRate.toStringAsFixed(1)}%",
-                              style: TextStyle(
-                                color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent,
-                                fontSize: 40,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                              );
+                            },
+                          ),
+                        );
+                      },
                     ),
 
                   // 右側: データ表示エリア (GridView)
@@ -1009,6 +1246,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                 : _aggregatedData.isEmpty
                   ? Center(child: Text("指定された条件のデータはありません", style: TextStyle(color: dp.subTextColor, fontSize: 20)))
                   : GridView.builder(
+                      padding: const EdgeInsets.only(bottom: 12),
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         childAspectRatio: 3.3,
@@ -1037,29 +1275,39 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                         int h = (totalMinutes / 60).floor();
                         int m = (totalMinutes % 60).round();
                         if (h > 0) {
-                          timeDisplay = "${h}時間${m}分";
+                          timeDisplay = "$h時間$m分";
                         } else {
-                          timeDisplay = "${m}分";
+                          timeDisplay = "$m分";
                         }
 
                         String workType = item['work_type'] ?? "不明";
                         Color typeColor = isWhite ? Colors.grey.shade700 : Colors.grey;
+                        Color cardBgColor;
+
                         if (workType == "清掃") {
                           typeColor = isWhite ? const Color(0xFF008855) : Colors.greenAccent;
+                          cardBgColor = isWhite ? const Color(0xFFEDF8F2) : const Color(0xFF00FF88).withOpacity(0.14);
                         } else if (workType == "エアー清掃") {
                           typeColor = isWhite ? const Color(0xFF006688) : const Color(0xFF00CCFF);
+                          cardBgColor = isWhite ? const Color(0xFFEBF7FC) : const Color(0xFF00CCFF).withOpacity(0.16);
                         } else if (workType == "筐体交換") {
                           typeColor = isWhite ? const Color(0xFFD45500) : Colors.orangeAccent;
+                          cardBgColor = isWhite ? const Color(0xFFFFF4EB) : const Color(0xFFFF8800).withOpacity(0.16);
+                        } else {
+                          cardBgColor = isWhite ? Colors.white : dp.currentCardColor;
                         }
 
                         return Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           decoration: BoxDecoration(
-                            color: isWhite ? Colors.white : typeColor.withOpacity(0.18),
+                            color: cardBgColor,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: isWhite ? typeColor : typeColor.withOpacity(0.8), width: isWhite ? 2.5 : 2),
+                            border: Border.all(
+                              color: isWhite ? typeColor.withOpacity(0.7) : typeColor.withOpacity(0.8), 
+                              width: 2.0,
+                            ),
                             boxShadow: isWhite ? [
-                              BoxShadow(color: typeColor.withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 3))
+                              BoxShadow(color: typeColor.withOpacity(0.12), blurRadius: 8, offset: const Offset(0, 3))
                             ] : null,
                           ),
                           child: Row(
@@ -1073,7 +1321,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: typeColor.withOpacity(isWhite ? 0.15 : 0.1),
+                                            color: isWhite ? Colors.white.withOpacity(0.9) : typeColor.withOpacity(0.2),
                                             borderRadius: BorderRadius.circular(6),
                                             border: Border.all(color: typeColor, width: 1.5),
                                           ),
@@ -1253,7 +1501,64 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                           double swapRate = item['swap_rate']?.toDouble() ?? 0.0;
                           double totalMinutes = item['total_minutes']?.toDouble() ?? 0.0;
 
-                          Color typeColor = isWhite ? const Color(0xFFD45500) : Colors.orangeAccent;
+                          int totAir = item['total_air'] ?? 0;
+                          int totClean = item['total_clean'] ?? 0;
+                          int totSwap = item['total_swap'] ?? 0;
+                          String workerDomType = "清掃";
+                          if (totAir > totClean && totAir > totSwap) {
+                            workerDomType = "エアー清掃";
+                          } else if (totSwap > totClean && totSwap > totAir) {
+                            workerDomType = "筐体交換";
+                          }
+
+                          Color typeColor;
+                          Color cardBgColor;
+                          if (workerDomType == "エアー清掃") {
+                            typeColor = isWhite ? const Color(0xFF006688) : const Color(0xFF00CCFF);
+                            cardBgColor = isWhite ? const Color(0xFFEBF7FC) : const Color(0xFF00CCFF).withOpacity(0.12);
+                          } else if (workerDomType == "筐体交換") {
+                            typeColor = isWhite ? const Color(0xFFD45500) : Colors.orangeAccent;
+                            cardBgColor = isWhite ? const Color(0xFFFFF4EB) : const Color(0xFFFF8800).withOpacity(0.12);
+                          } else {
+                            typeColor = isWhite ? const Color(0xFF008855) : Colors.greenAccent;
+                            cardBgColor = isWhite ? const Color(0xFFEDF8F2) : const Color(0xFF00FF88).withOpacity(0.12);
+                          }
+
+                          // 作業比率に応じた「くっきり帯グラフ風」背景グラデーションの構築 (エアー -> 清掃 -> 筐体交換)
+                          Color airBg = isWhite ? const Color(0xFFEBF7FC) : const Color(0xFF00CCFF).withOpacity(0.12);
+                          Color cleanBg = isWhite ? const Color(0xFFEDF8F2) : const Color(0xFF00FF88).withOpacity(0.12);
+                          Color swapBg = isWhite ? const Color(0xFFFFF4EB) : const Color(0xFFFF8800).withOpacity(0.12);
+
+                          int totalWorkUnits = totAir + totClean + totSwap;
+                          List<Color> gradientColors = [];
+                          List<double> gradientStops = [];
+
+                          if (totalWorkUnits > 0) {
+                            final workSegments = [
+                              if (totAir > 0) {'color': airBg, 'ratio': totAir / totalWorkUnits},
+                              if (totClean > 0) {'color': cleanBg, 'ratio': totClean / totalWorkUnits},
+                              if (totSwap > 0) {'color': swapBg, 'ratio': totSwap / totalWorkUnits},
+                            ];
+
+                            // 💡 割合(%)が大きい作業区分を左側から順に並べる (降順ソート)
+                            workSegments.sort((a, b) => (b['ratio'] as double).compareTo(a['ratio'] as double));
+
+                            if (workSegments.length > 1) {
+                              double currentPos = 0.0;
+                              for (int i = 0; i < workSegments.length; i++) {
+                                Color segColor = workSegments[i]['color'] as Color;
+                                double segRatio = workSegments[i]['ratio'] as double;
+                                double nextPos = (i == workSegments.length - 1) ? 1.0 : (currentPos + segRatio).clamp(0.0, 1.0);
+
+                                gradientColors.add(segColor);
+                                gradientStops.add(currentPos);
+                                gradientColors.add(segColor);
+                                gradientStops.add(nextPos);
+
+                                currentPos = nextPos;
+                              }
+                            }
+                          }
 
                           Color progressColor = isWhite ? Colors.red.shade700 : Colors.redAccent;
                           if (achievePercent >= 100) progressColor = isWhite ? const Color(0xFF008855) : const Color(0xFF00FFCC);
@@ -1287,10 +1592,18 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                               margin: const EdgeInsets.only(bottom: 15),
                               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                               decoration: BoxDecoration(
-                                color: isWhite ? Colors.white : typeColor.withOpacity(0.1),
+                                color: gradientColors.isEmpty ? cardBgColor : null,
+                                gradient: gradientColors.isNotEmpty
+                                    ? LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: gradientColors,
+                                        stops: gradientStops,
+                                      )
+                                    : null,
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: typeColor.withOpacity(isWhite ? 0.6 : 0.5), width: isWhite ? 2 : 1),
-                                boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2))] : null,
+                                border: Border.all(color: typeColor.withOpacity(isWhite ? 0.7 : 0.6), width: isWhite ? 2 : 1.5),
+                                boxShadow: isWhite ? [BoxShadow(color: typeColor.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))] : null,
                               ),
                               child: Row(
                               children: [
@@ -1300,7 +1613,24 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(item['worker_name'], style: TextStyle(color: dp.mainTextColor, fontSize: 24, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                      Row(
+                                        children: [
+                                          Text(item['worker_name'], style: TextStyle(color: dp.mainTextColor, fontSize: 24, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                          const SizedBox(width: 10),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: isWhite ? Colors.white.withOpacity(0.9) : typeColor.withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: typeColor, width: 1.2),
+                                            ),
+                                            child: Text(
+                                              "最多: $workerDomType",
+                                              style: TextStyle(color: typeColor, fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                       const SizedBox(height: 5),
                                       Text("総作業時間: ${(totalMinutes / 60).toStringAsFixed(1)}時間", style: TextStyle(color: dp.subTextColor, fontSize: 16)),
                                     ],
@@ -1321,7 +1651,7 @@ class _PersonalProductivityPageState extends State<PersonalProductivityPage> {
                                         children: [
                                           Icon(Icons.verified_outlined, color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent, size: 22),
                                           const SizedBox(width: 8),
-                                          Text("不良率:", style: TextStyle(color: dp.mainTextColor, fontSize: 17, fontWeight: FontWeight.bold)),
+                                          Text("筐体交換行き率:", style: TextStyle(color: dp.mainTextColor, fontSize: 16, fontWeight: FontWeight.bold)),
                                           const SizedBox(width: 8),
                                           Text("${swapRate.toStringAsFixed(1)}%", style: TextStyle(color: isWhite ? Colors.purple.shade700 : Colors.purpleAccent, fontSize: 24, fontWeight: FontWeight.bold)),
                                         ],

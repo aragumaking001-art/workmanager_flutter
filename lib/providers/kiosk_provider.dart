@@ -13,15 +13,24 @@ class KioskProvider extends ChangeNotifier {
 
   // 現在表示中の作業者ID（nullなら待機中）
   String? currentWorkerId;
+  final bool isEnabled;
 
-  KioskProvider() {
-    _startPolling();
+  KioskProvider({this.isEnabled = true}) {
+    if (isEnabled) {
+      _startPolling();
+    }
   }
 
   void _startPolling() {
+    _pollingTimer?.cancel();
     _pollingTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       await _checkNfcStatus();
     });
+  }
+
+  void stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
   }
 
   Future<void> _checkNfcStatus() async {

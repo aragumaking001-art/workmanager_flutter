@@ -485,6 +485,7 @@ class WorkApp:
             std_qty REAL, 
             lucky_flag TEXT,
             edit_count INTEGER DEFAULT 0,
+            anomaly_flag INTEGER DEFAULT 0,
             reserve_3 TEXT, reserve_4 TEXT, reserve_5 TEXT
         )""")
 
@@ -508,6 +509,7 @@ class WorkApp:
             ("lucky_flag", "TEXT"),
             ("maker_abbr", "TEXT"),
             ("edit_count", "INTEGER DEFAULT 0"),
+            ("anomaly_flag", "INTEGER DEFAULT 0"),
             ("location", "TEXT DEFAULT 'A'")  # 💡 追加 (デフォルトはA拠点)
         ]
         for col_name, col_type in new_columns:
@@ -1245,17 +1247,36 @@ class WorkApp:
         to_clean_val = self.reg_data.get("ng", 0) if is_air else 0
         to_swap_val = self.reg_data.get("ng", 0) if not is_air else 0
 
-        # ★手入力モードか通常モードかで保存する数値を切り替え
+        # ★手入力モードか通常モードかで保存する数値を切り替え & 異常フラグ判定
+        # anomaly_flag: 0=正常, 1=短時間(3分未満/開始タッチ忘れ疑い), 2=長時間(12時間以上/終了タッチ忘れ疑い), 3=台数過大(実作業時間×標準台数×5倍超過)
+        total_units = int(self.reg_data.get("air", 0)) + int(self.reg_data.get("clean", 0)) + int(self.reg_data.get("swap", 0))
+        anomaly_flag = 0
         if getattr(self, "is_fix_mode", False):
             duration_min = self.reg_data.get("fix_duration_min", 0)
             start_time_str = "00:00"
             end_time_str = "00:00"
             work_min = duration_min
+            work_hours = (duration_min / 60.0) if duration_min > 0 else 7.0
+            max_allowed = max(3, math.ceil(work_hours * std_qty * 5.0))
+            if duration_min < 3:
+                anomaly_flag = 1
+            elif total_units > max_allowed:
+                anomaly_flag = 3
+            elif duration_min >= 720:
+                anomaly_flag = 2
         else:
             active_sec, _ = self.get_timer_status(self.my_start_ts)
             start_time_str = datetime.fromtimestamp(self.my_start_ts).strftime("%H:%M")
             work_min = math.ceil(active_sec / 60)
             end_time_str = now.strftime("%H:%M")
+            work_hours = max(active_sec / 3600.0, 1.0 / 60.0)
+            max_allowed = max(3, math.ceil(work_hours * std_qty * 5.0))
+            if active_sec < 180:
+                anomaly_flag = 1
+            elif total_units > max_allowed:
+                anomaly_flag = 3
+            elif active_sec >= 12 * 3600:
+                anomaly_flag = 2
 
         # 💡 location に "A" を保存するように INSERT 文を修正
         conn.execute("""
@@ -1264,15 +1285,15 @@ class WorkApp:
                 air_clean_qty, to_clean_qty, clean_qty, 
                 to_swap_qty, swap_qty, 
                 start_time_str, end_time_str, work_minutes, created_at, sync_flag,
-                std_qty, lucky_flag, edit_count, reserve_3, reserve_4, reserve_5
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
+                std_qty, lucky_flag, edit_count, anomaly_flag, reserve_3, reserve_4, reserve_5
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", 
             (
                 "A", # 💡 拠点コード（B拠点のPCなら "B" に変更する）
                 now.strftime("%Y/%m/%d"), self.my_worker_id, self.reg_data["model"], self.reg_data["maker"], self.reg_data.get("abbr", ""), self.reg_data.get("cat", "未分類"), 
                 self.reg_data["air"], to_clean_val, self.reg_data["clean"], 
                 to_swap_val, self.reg_data["swap"], 
                 start_time_str, end_time_str, work_min, now.strftime("%Y-%m-%d %H:%M:%S"), 
-                0, std_qty, lucky_val, 0, "", "", ""
+                0, std_qty, lucky_val, 0, anomaly_flag, "", "", ""
             )
         )
         conn.commit()

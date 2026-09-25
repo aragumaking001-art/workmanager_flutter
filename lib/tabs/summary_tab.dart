@@ -360,6 +360,7 @@ class _ModelAnalysisPageState extends State<ModelAnalysisPage> {
                                           if (maker == 'F/O') return 7;
                                           if (maker == 'H/M') return 8;
                                           if (maker == 'H/O') return 9;
+                                          if (maker == 'O/O') return 10;
                                           
                                           return 99;
                                         }

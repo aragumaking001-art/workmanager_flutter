@@ -164,105 +164,126 @@ class App(ctk.CTk):
                 model_name = model_map.get(orig_model_str, orig_model_str)
                 maker_name = maker_map.get(orig_maker_str, "")
                 
+                # 行の全日付の予定数を辞書に読み取る
+                row_plans = {}
+                has_positive_plan = False
                 for col_idx, target_date in dates.items():
                     plan_val = ws.cell(row=row_idx, column=col_idx).value
                     if plan_val is None or str(plan_val).strip() == "":
-                        plan_count = 0
+                        cnt = 0
                     else:
                         try:
-                            plan_count = int(float(str(plan_val).strip()))
+                            cnt = int(float(str(plan_val).strip()))
                         except ValueError:
-                            continue
-                        
-                    # マスター(m_models)の登録状況をチェック
-                    cursor.execute('''
-                        SELECT DISTINCT maker_abbr FROM m_models 
-                        WHERE model_name = %s
-                    ''', (model_name,))
-                    master_makers = cursor.fetchall()
-                    
-                    # 完全に未知の機種か判定
-                    if not master_makers:
-                        # マスターに存在しない場合、ユーザーにダイアログで選択させる
-                        selected_action = None
-                        mapped_model_name = None
-                        
-                        def on_map():
-                            nonlocal selected_action, mapped_model_name
-                            selected_action = "map"
-                            mapped_model_name = combo_models.get()
-                            popup.destroy()
-                            
-                        def on_new():
-                            nonlocal selected_action
-                            selected_action = "new"
-                            popup.destroy()
-                            
-                        def on_skip():
-                            nonlocal selected_action
-                            selected_action = "skip"
-                            popup.destroy()
-                            
-                        popup = tk.Toplevel(self)
-                        popup.title("未知の機種が見つかりました")
-                        popup.geometry("500x350")
-                        popup.transient(self)
-                        popup.grab_set()
-                        
-                        tk.Label(popup, text=f"エクセル内に未知の機種名が見つかりました:\n\n「{orig_model_str}」\n\nどう処理しますか？", justify="left").pack(pady=10, padx=10)
-                        
-                        # 既存機種リストの取得 (MySQL 3065 エラー対策として DISTINCT + ORDER BY を GROUP BY + MIN() に変更)
-                        cursor.execute("SELECT model_name FROM m_models GROUP BY model_name ORDER BY MIN(sort_order) ASC")
-                        all_models = [r['model_name'] for r in cursor.fetchall()]
-                        
-                        tk.Label(popup, text="▼ 既存の機種に変換（マッピング）する場合 ▼").pack(pady=5)
-                        combo_models = ttk.Combobox(popup, values=all_models, width=40, state="readonly")
-                        if all_models:
-                            combo_models.set(all_models[0])
-                        combo_models.pack(pady=5)
-                        tk.Button(popup, text="この機種に変換する", command=on_map, bg="lightblue").pack(pady=5)
-                        
-                        tk.Label(popup, text="▼ または ▼").pack(pady=10)
-                        tk.Button(popup, text="新機種としてそのままマスターに追加する", command=on_new, bg="lightgreen").pack(pady=5)
-                        
-                        tk.Label(popup, text="▼ または ▼").pack(pady=5)
-                        tk.Button(popup, text="この行をスキップする（取り込まない）", command=on_skip, bg="lightcoral").pack(pady=5)
-                        
-                        self.wait_window(popup)
-                        
-                        if selected_action == "map" and mapped_model_name:
-                            # マッピングを保存
-                            cursor.execute("INSERT INTO m_model_mapping (original_name, mapped_name) VALUES (%s, %s) ON DUPLICATE KEY UPDATE mapped_name = %s", 
-                                           (orig_model_str, mapped_model_name, mapped_model_name))
-                            conn.commit()
-                            model_map[orig_model_str] = mapped_model_name
-                            model_name = mapped_model_name
-                            
-                            # マスター情報を再取得
-                            cursor.execute('SELECT DISTINCT maker_abbr FROM m_models WHERE model_name = %s', (model_name,))
-                            master_makers = cursor.fetchall()
-                            
-                        elif selected_action == "new":
-                            # 新規機種として m_model_mapping に自分自身をマッピングして記憶
-                            cursor.execute("INSERT INTO m_model_mapping (original_name, mapped_name) VALUES (%s, %s) ON DUPLICATE KEY UPDATE mapped_name = %s", 
-                                           (orig_model_str, orig_model_str, orig_model_str))
-                            conn.commit()
-                            model_map[orig_model_str] = orig_model_str
-                            model_name = orig_model_str
-                            # マスターには存在しないが、エラーを回避するためにダミーのメーカー情報をセット
-                            master_makers = [{'maker_abbr': ''}]
-                        elif selected_action == "skip":
-                            skipped_models.add(orig_model_str)
-                            break
-                        else:
-                            # 閉じるボタンなどでキャンセルされた場合はスキップ
-                            skipped_models.add(orig_model_str)
-                            break
+                            cnt = 0
+                    row_plans[target_date] = cnt
+                    if cnt > 0:
+                        has_positive_plan = True
 
-                    # もしマスターに登録されているメーカーが空文字1種類だけなら、エクセルのメーカー指定を無視して空文字にする
-                    if len(master_makers) == 1 and (master_makers[0]['maker_abbr'] is None or master_makers[0]['maker_abbr'] == ''):
-                        maker_name = ""
+
+                # マスター(m_models)の登録状況をチェック
+                cursor.execute('''
+                    SELECT DISTINCT maker_abbr FROM m_models 
+                    WHERE model_name = %s
+                ''', (model_name,))
+                master_makers = cursor.fetchall()
+
+                # もしマスターに登録されているメーカーが空文字1種類だけなら、エクセルのメーカー指定を無視して空文字にする
+                if len(master_makers) == 1 and (master_makers[0]['maker_abbr'] is None or master_makers[0]['maker_abbr'] == ''):
+                    maker_name = ""
+
+                # エクセル上に予定が1台もなく、DBにも既存予定が無い場合は完全スキップ（ポップアップを出さない）
+                if not has_positive_plan:
+                    cursor.execute('''
+                        SELECT id FROM t_schedules 
+                        WHERE target_date BETWEEN %s AND %s 
+                          AND model_name = %s AND maker_name = %s 
+                        LIMIT 1
+                    ''', (min_date, max_date, model_name, maker_name))
+                    if not cursor.fetchone():
+                        continue
+
+                # 予定が1台以上あり、マスターに存在しない場合はユーザーにダイアログで選択させる
+                if not master_makers and has_positive_plan:
+                    selected_action = None
+                    mapped_model_name = None
+                    
+                    def on_map():
+                        nonlocal selected_action, mapped_model_name
+                        selected_action = "map"
+                        mapped_model_name = combo_models.get()
+                        popup.destroy()
                         
+                    def on_new():
+                        nonlocal selected_action
+                        selected_action = "new"
+                        popup.destroy()
+                        
+                    def on_skip():
+                        nonlocal selected_action
+                        selected_action = "skip"
+                        popup.destroy()
+                        
+                    popup = tk.Toplevel(self)
+                    popup.title("未知の機種が見つかりました")
+                    popup.geometry("500x350")
+                    popup.transient(self)
+                    popup.grab_set()
+                    
+                    tk.Label(popup, text=f"エクセル内に未知の機種名が見つかりました:\n\n「{orig_model_str}」\n\nどう処理しますか？", justify="left").pack(pady=10, padx=10)
+                    
+                    # 既存機種リストの取得 (MySQL 3065 エラー対策として DISTINCT + ORDER BY を GROUP BY + MIN() に変更)
+                    cursor.execute("SELECT model_name FROM m_models GROUP BY model_name ORDER BY MIN(sort_order) ASC")
+                    all_models = [r['model_name'] for r in cursor.fetchall()]
+                    
+                    tk.Label(popup, text="▼ 既存の機種に変換（マッピング）する場合 ▼").pack(pady=5)
+                    combo_models = ttk.Combobox(popup, values=all_models, width=40, state="readonly")
+                    if all_models:
+                        combo_models.set(all_models[0])
+                    combo_models.pack(pady=5)
+                    tk.Button(popup, text="この機種に変換する", command=on_map, bg="lightblue").pack(pady=5)
+                    
+                    tk.Label(popup, text="▼ または ▼").pack(pady=10)
+                    tk.Button(popup, text="新機種としてそのままマスターに追加する", command=on_new, bg="lightgreen").pack(pady=5)
+                    
+                    tk.Label(popup, text="▼ または ▼").pack(pady=5)
+                    tk.Button(popup, text="この行をスキップする（取り込まない）", command=on_skip, bg="lightcoral").pack(pady=5)
+                    
+                    self.wait_window(popup)
+                    
+                    if selected_action == "map" and mapped_model_name:
+                        # マッピングを保存
+                        cursor.execute("INSERT INTO m_model_mapping (original_name, mapped_name) VALUES (%s, %s) ON DUPLICATE KEY UPDATE mapped_name = %s", 
+                                       (orig_model_str, mapped_model_name, mapped_model_name))
+                        conn.commit()
+                        model_map[orig_model_str] = mapped_model_name
+                        model_name = mapped_model_name
+                        
+                        # マスター情報を再取得
+                        cursor.execute('SELECT DISTINCT maker_abbr FROM m_models WHERE model_name = %s', (model_name,))
+                        master_makers = cursor.fetchall()
+                        if len(master_makers) == 1 and (master_makers[0]['maker_abbr'] is None or master_makers[0]['maker_abbr'] == ''):
+                            maker_name = ""
+                        
+                    elif selected_action == "new":
+                        # 新規機種として m_model_mapping に自分自身をマッピングして記憶
+                        cursor.execute("INSERT INTO m_model_mapping (original_name, mapped_name) VALUES (%s, %s) ON DUPLICATE KEY UPDATE mapped_name = %s", 
+                                       (orig_model_str, orig_model_str, orig_model_str))
+                        conn.commit()
+                        model_map[orig_model_str] = orig_model_str
+                        model_name = orig_model_str
+                        # マスターには存在しないが、エラーを回避するためにダミーのメーカー情報をセット
+                        master_makers = [{'maker_abbr': ''}]
+                    elif selected_action == "skip":
+                        skipped_models.add(orig_model_str)
+                        continue
+                    else:
+                        # 閉じるボタンなどでキャンセルされた場合はスキップ
+                        skipped_models.add(orig_model_str)
+                        continue
+
+                # 各日付のデータをDBに反映
+                for target_date, plan_count in row_plans.items():
                     # すでにDBにあるかチェック
                     cursor.execute('''
                         SELECT id FROM t_schedules 

@@ -32,23 +32,32 @@ class AppBackgroundWrapper extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Positioned.fill(
-          child: Image.asset(
-            'assets/bg_tech_abstract.jpg',
-            fit: BoxFit.cover,
+        RepaintBoundary(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned.fill(
+                child: Image.asset(
+                  'assets/bg_tech_abstract.jpg',
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                  child: Container(
+                    color: isWhite
+                        ? Colors.white.withValues(alpha: effectiveWhiteAlpha)
+                        : Colors.black.withValues(alpha: effectiveDarkAlpha),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-        Positioned.fill(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-            child: Container(
-              color: isWhite
-                  ? Colors.white.withValues(alpha: effectiveWhiteAlpha)
-                  : Colors.black.withValues(alpha: effectiveDarkAlpha),
-            ),
-          ),
+        RepaintBoundary(
+          child: child,
         ),
-        child,
       ],
     );
   }

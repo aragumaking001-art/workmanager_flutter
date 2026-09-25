@@ -10,6 +10,7 @@ import pandas as pd
 from datetime import datetime
 import os
 import sys
+import math
 
 # 💡 Windowsコンソールでの絵文字(cp932)によるクラッシュを防ぐ
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
@@ -158,6 +159,8 @@ def main(page: ft.Page):
             except: pass
             try: my_cur.execute("ALTER TABLE unit_cleaning_logs ADD COLUMN edit_count INT DEFAULT 0 AFTER lucky_flag;")
             except: pass
+            try: my_cur.execute("ALTER TABLE unit_cleaning_logs ADD COLUMN anomaly_flag INT DEFAULT 0 AFTER edit_count;")
+            except: pass
 
             my_cur.execute("""
                 CREATE TABLE IF NOT EXISTS daily_targets (
@@ -238,6 +241,12 @@ def main(page: ft.Page):
 
                 sl_conn = sqlite3.connect(db_path)
                 sl_conn.row_factory = sqlite3.Row
+                try:
+                    sl_conn.execute("ALTER TABLE unit_cleaning_logs ADD COLUMN anomaly_flag INTEGER DEFAULT 0")
+                    sl_conn.commit()
+                except Exception:
+                    pass
+
                 my_conn = get_db_connection()
                 sl_cur, my_cur = sl_conn.cursor(), my_conn.cursor()
 
@@ -245,7 +254,7 @@ def main(page: ft.Page):
                     "location", "work_date", "worker_id", "model_name", "maker", "maker_abbr", 
                     "category", "air_clean_qty", "to_clean_qty", "clean_qty", "to_swap_qty", "swap_qty", 
                     "start_time_str", "end_time_str", "work_minutes", "created_at", 
-                    "std_qty", "lucky_flag", "edit_count", "reserve_3", "reserve_4", "reserve_5"
+                    "std_qty", "lucky_flag", "edit_count", "anomaly_flag", "reserve_3", "reserve_4", "reserve_5"
                 ]
                 cols_str = ", ".join(target_columns)
 
@@ -265,55 +274,85 @@ def main(page: ft.Page):
 
                             # --- 💡 スケジュールへの前倒し消化連動 ---
                             try:
-                                # エアー清掃、通常清掃、筐体交換の合計値を算出
+                                # 異常フラグが立っているレコードはスケジュール消化・累計加算から除外（誤入力でのスケジュール狂いを防止）
+                                anomaly_val = int(row["anomaly_flag"] or 0) if "anomaly_flag" in row.keys() else 0
                                 air_qty = int(row["air_clean_qty"] or 0)
                                 cln_qty = int(row["clean_qty"] or 0)
                                 swp_qty = int(row["swap_qty"] or 0)
                                 c_qty = air_qty + cln_qty + swp_qty
-                                
-                                if c_qty > 0:
-                                    m_name = str(row["model_name"] or "").strip()
-                                    m_maker = str(row["maker_abbr"] or "").strip()
-                                    
-                                    # 表記揺れ吸収：マスター側の F-D(M) などをスケジュール側の F-D に一致させるため、末尾のカッコを削除
-                                    import re
-                                    m_name = re.sub(r'[\(（][A-Za-z0-9_]+[\)）]$', '', m_name).strip()
 
+                                # 台数過大（実作業時間×標準台数×5倍超過: flag=3）、作業時間3分未満（flag=1）、12時間以上（flag=2）として扱いスケジュール消化をスキップ
+                                work_min_val = float(row["work_minutes"] or 0.0) if "work_minutes" in row.keys() else 0.0
+                                std_qty_val = float(row["std_qty"] or 10.0) if "std_qty" in row.keys() and row["std_qty"] is not None else 10.0
+                                work_hours = (work_min_val / 60.0) if work_min_val > 0 else 7.0
+                                max_allowed = max(3, math.ceil(work_hours * std_qty_val * 5.0))
 
-                                    if m_name != "":
-                                        # まず未達成のスケジュールを古い順に取得
-                                        my_cur.execute(
-                                            "SELECT id, plan_count, actual_count FROM t_schedules WHERE model_name = %s AND maker_name = %s AND actual_count < plan_count ORDER BY target_date ASC",
-                                            (m_name, m_maker)
-                                        )
-                                        scheds = my_cur.fetchall()
+                                if anomaly_val == 0:
+                                    if work_min_val < 3.0:
+                                        anomaly_val = 1
+                                        try:
+                                            my_cur.execute("UPDATE unit_cleaning_logs SET anomaly_flag = 1 WHERE id = %s", (row["id"],))
+                                        except Exception:
+                                            pass
+                                    elif c_qty > max_allowed:
+                                        anomaly_val = 3
+                                        try:
+                                            my_cur.execute("UPDATE unit_cleaning_logs SET anomaly_flag = 3 WHERE id = %s", (row["id"],))
+                                        except Exception:
+                                            pass
+                                    elif work_min_val >= 720.0:
+                                        anomaly_val = 2
+                                        try:
+                                            my_cur.execute("UPDATE unit_cleaning_logs SET anomaly_flag = 2 WHERE id = %s", (row["id"],))
+                                        except Exception:
+                                            pass
+
+                                if anomaly_val != 0:
+                                    print(f"⚠️ 異常データ検知 (ID:{row['id']}, flag:{anomaly_val}): スケジュール連動をスキップします")
+                                else:
+                                    if c_qty > 0:
+                                        m_name = str(row["model_name"] or "").strip()
+                                        m_maker = str(row["maker_abbr"] or "").strip()
                                         
-                                        rem = int(c_qty)
-                                        if len(scheds) > 0:
-                                            # 未達成枠がある場合は古いものから埋めていく
-                                            for sid, p_cnt, a_cnt in scheds:
-                                                if rem <= 0: break
-                                                shortage = p_cnt - a_cnt
-                                                add_amt = shortage if rem >= shortage else rem
-                                                my_cur.execute("UPDATE t_schedules SET actual_count = actual_count + %s WHERE id = %s", (add_amt, sid))
-                                                rem -= add_amt
-                                                
-                                            # 全て埋めても余った場合は、オーバーさせずに捨てる（何もしない）
-                                            pass
-                                        else:
-                                            # 全て達成済み(未達成ゼロ)の場合も、予定を超過させずに捨てる
-                                            pass
+                                        # 表記揺れ吸収：マスター側の F-D(M) などをスケジュール側の F-D に一致させるため、末尾のカッコを削除
+                                        import re
+                                        m_name = re.sub(r'[\(（][A-Za-z0-9_]+[\)）]$', '', m_name).strip()
 
-                                        # --- 💡 追加：左側の3種類 (t_model_schedules) への自動加算 ---
-                                        my_cur.execute("""
-                                            INSERT INTO t_model_schedules (model_name, maker_name, air_count, clean_count, swap_count, total_count)
-                                            VALUES (%s, %s, %s, %s, %s, %s)
-                                            ON DUPLICATE KEY UPDATE
-                                            air_count = air_count + VALUES(air_count),
-                                            clean_count = clean_count + VALUES(clean_count),
-                                            swap_count = swap_count + VALUES(swap_count),
-                                            total_count = total_count + VALUES(total_count)
-                                        """, (m_name, m_maker, air_qty, cln_qty, swp_qty, c_qty))
+
+                                        if m_name != "":
+                                            # まず未達成のスケジュールを古い順に取得
+                                            my_cur.execute(
+                                                "SELECT id, plan_count, actual_count FROM t_schedules WHERE model_name = %s AND maker_name = %s AND actual_count < plan_count ORDER BY target_date ASC",
+                                                (m_name, m_maker)
+                                            )
+                                            scheds = my_cur.fetchall()
+                                            
+                                            rem = int(c_qty)
+                                            if len(scheds) > 0:
+                                                # 未達成枠がある場合は古いものから埋めていく
+                                                for sid, p_cnt, a_cnt in scheds:
+                                                    if rem <= 0: break
+                                                    shortage = p_cnt - a_cnt
+                                                    add_amt = shortage if rem >= shortage else rem
+                                                    my_cur.execute("UPDATE t_schedules SET actual_count = actual_count + %s WHERE id = %s", (add_amt, sid))
+                                                    rem -= add_amt
+                                                    
+                                                # 全て埋めても余った場合は、オーバーさせずに捨てる（何もしない）
+                                                pass
+                                            else:
+                                                # 全て達成済み(未達成ゼロ)の場合も、予定を超過させずに捨てる
+                                                pass
+
+                                            # --- 💡 追加：左側の3種類 (t_model_schedules) への自動加算 ---
+                                            my_cur.execute("""
+                                                INSERT INTO t_model_schedules (model_name, maker_name, air_count, clean_count, swap_count, total_count)
+                                                VALUES (%s, %s, %s, %s, %s, %s)
+                                                ON DUPLICATE KEY UPDATE
+                                                air_count = air_count + VALUES(air_count),
+                                                clean_count = clean_count + VALUES(clean_count),
+                                                swap_count = swap_count + VALUES(swap_count),
+                                                total_count = total_count + VALUES(total_count)
+                                            """, (m_name, m_maker, air_qty, cln_qty, swp_qty, c_qty))
                             except Exception as sync_err:
                                 print(f"⚠️ スケジュール連動エラー: {sync_err}")
                             # ------------------------------------

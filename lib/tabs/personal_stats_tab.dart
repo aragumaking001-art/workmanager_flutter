@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:async';
 import '../providers/data_provider.dart';
 import '../widgets/app_background_wrapper.dart';
+import '../widgets/anomaly_status_indicator.dart';
 
 class PersonalStatsTab extends StatefulWidget {
   final String? initialWorkerId;
@@ -80,7 +81,7 @@ class _PersonalStatsTabState extends State<PersonalStatsTab>
                 onPressed: () => Navigator.pop(context),
               ),
               actions: const [
-                Center(child: _ConnectionStatusIndicator()),
+                Center(child: ConnectionStatusIndicator()),
                 SizedBox(width: 20),
               ],
             ),
@@ -1659,66 +1660,6 @@ class RadarChartPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// ----------------------------------------------------------------------
-// 💡 このファイル専用のオンライン/オフライン バッジ
-// ----------------------------------------------------------------------
-class _ConnectionStatusIndicator extends StatelessWidget {
-  const _ConnectionStatusIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    final data = context.watch<DataProvider>();
-    final bool isOnline = data.isOnline;
-    final bool isWhite = data.displayMode == DisplayMode.pureWhite;
-
-    final Color activeColor = isOnline
-        ? (isWhite ? const Color(0xFF008844) : Colors.greenAccent)
-        : (isWhite ? const Color(0xFFCC0033) : Colors.redAccent);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: BoxDecoration(
-        color: isWhite
-            ? activeColor.withOpacity(0.12)
-            : activeColor.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: activeColor.withOpacity(isWhite ? 0.8 : 0.6),
-          width: isWhite ? 2.0 : 1.5,
-        ),
-        boxShadow: isWhite
-            ? [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isOnline ? Icons.wifi : Icons.wifi_off,
-            color: activeColor,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            isOnline ? "Online" : "Offline",
-            style: TextStyle(
-              color: activeColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              letterSpacing: 1.0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // 💡 ドーナツチャート描画クラス (円弧の中にテキストを入れるスタイル)
 class DonutChartPainter extends CustomPainter {

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'dart:math';
 import 'package:mysql_client/mysql_client.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../providers/data_provider.dart';
 import '../widgets/app_background_wrapper.dart';
+import '../widgets/anomaly_status_indicator.dart';
 
 enum EditMode { menu, today, previousDay, past }
 
@@ -35,13 +37,26 @@ class _DataEditTabState extends State<DataEditTab> {
     return ["すべて", ...sorted];
   }
 
-  List<Map<String, dynamic>> get _filteredLogs {
-    if (_selectedWorkerFilter == null || _selectedWorkerFilter == "すべて") {
-      return _dayLogs;
-    }
+  bool _onlyShowAnomalies = false;
+
+  int get _anomalyCount {
     return _dayLogs.where((log) {
-      String name = log['worker_name'] ?? log['worker_id'] ?? "不明";
-      return name == _selectedWorkerFilter;
+      final flag = int.tryParse(log['anomaly_flag']?.toString() ?? '0') ?? 0;
+      return flag != 0;
+    }).length;
+  }
+
+  List<Map<String, dynamic>> get _filteredLogs {
+    return _dayLogs.where((log) {
+      if (_onlyShowAnomalies) {
+        final flag = int.tryParse(log['anomaly_flag']?.toString() ?? '0') ?? 0;
+        if (flag == 0) return false;
+      }
+      if (_selectedWorkerFilter != null && _selectedWorkerFilter != "すべて") {
+        String name = log['worker_name'] ?? log['worker_id'] ?? "不明";
+        if (name != _selectedWorkerFilter) return false;
+      }
+      return true;
     }).toList();
   }
 
@@ -104,7 +119,7 @@ class _DataEditTabState extends State<DataEditTab> {
       var result = await conn.execute('''
         SELECT 
           l.id, l.work_date, l.model_name, l.maker, l.maker_abbr, l.worker_id, l.clean_qty, l.air_clean_qty, 
-          l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty, l.work_minutes,
+          l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty, l.work_minutes, l.anomaly_flag,
           mem.worker_name
         FROM unit_cleaning_logs l
         LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
@@ -663,8 +678,16 @@ class _DataEditTabState extends State<DataEditTab> {
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   ),
                                   onPressed: () {
-                                    _showForgotInputDialog(context, hoursCtrl, minutesCtrl, provider, isWhite);
-                                  },
+                                     _showForgotInputDialog(
+                                       context, 
+                                       hoursCtrl, 
+                                       minutesCtrl, 
+                                       provider, 
+                                       isWhite,
+                                       startTimeStr: log['start_time_str']?.toString(),
+                                       endTimeStr: log['end_time_str']?.toString(),
+                                     );
+                                   },
                                 ),
                                 const SizedBox(width: 8),
                                 ElevatedButton.icon(
@@ -710,19 +733,37 @@ class _DataEditTabState extends State<DataEditTab> {
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15) 
                   ),
                   onPressed: () {
-                    Map<String, dynamic> newData = {
-                      "work_date": "${selectedDate.year}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.day.toString().padLeft(2, '0')}",
-                      "model_name": selectedModel,
-                      "maker": makerFull,       
-                      "maker_abbr": makerAbbr,  
-                      "std_qty": stdQty,        
-                      "air_clean_qty": targetWorkType == "エアー清掃" ? (int.tryParse(airCtrl.text) ?? 0) : 0,
-                      "to_clean_qty": targetWorkType == "エアー清掃" ? (int.tryParse(toCleanCtrl.text) ?? 0) : 0,
-                      "clean_qty": targetWorkType == "清掃" ? (int.tryParse(cleanCtrl.text) ?? 0) : 0,
-                      "to_swap_qty": targetWorkType == "清掃" ? (int.tryParse(toSwapCtrl.text) ?? 0) : 0,
-                      "swap_qty": targetWorkType == "筐体交換" ? (int.tryParse(swapCtrl.text) ?? 0) : 0, 
-                      "work_minutes": ((int.tryParse(hoursCtrl.text) ?? 0) * 60 + (int.tryParse(minutesCtrl.text) ?? 0)).toDouble(),
-                    };
+                      final int newMins = (int.tryParse(hoursCtrl.text) ?? 0) * 60 + (int.tryParse(minutesCtrl.text) ?? 0);
+                      final int aQty = targetWorkType == "エアー清掃" ? (int.tryParse(airCtrl.text) ?? 0) : 0;
+                      final int cQty = targetWorkType == "清掃" ? (int.tryParse(cleanCtrl.text) ?? 0) : 0;
+                      final int sQty = targetWorkType == "筐体交換" ? (int.tryParse(swapCtrl.text) ?? 0) : 0;
+                      final int totalQty = aQty + cQty + sQty;
+
+                      int newAnomalyFlag = 0;
+                      final double workHours = newMins > 0 ? (newMins / 60.0) : 7.0;
+                      final int maxAllowed = stdQty > 0 ? max(3, (workHours * stdQty * 5.0).ceil()) : 9999;
+                      if (newMins < 3) {
+                        newAnomalyFlag = 1;
+                      } else if (stdQty > 0 && totalQty > maxAllowed) {
+                        newAnomalyFlag = 3;
+                      } else if (newMins >= 720) {
+                        newAnomalyFlag = 2;
+                      }
+
+                      Map<String, dynamic> newData = {
+                        "work_date": "${selectedDate.year}/${selectedDate.month.toString().padLeft(2, '0')}/${selectedDate.day.toString().padLeft(2, '0')}",
+                        "model_name": selectedModel,
+                        "maker": makerFull,       
+                        "maker_abbr": makerAbbr,  
+                        "std_qty": stdQty,        
+                        "air_clean_qty": targetWorkType == "エアー清掃" ? (int.tryParse(airCtrl.text) ?? 0) : 0,
+                        "to_clean_qty": targetWorkType == "エアー清掃" ? (int.tryParse(toCleanCtrl.text) ?? 0) : 0,
+                        "clean_qty": targetWorkType == "清掃" ? (int.tryParse(cleanCtrl.text) ?? 0) : 0,
+                        "to_swap_qty": targetWorkType == "清掃" ? (int.tryParse(toSwapCtrl.text) ?? 0) : 0,
+                        "swap_qty": targetWorkType == "筐体交換" ? (int.tryParse(swapCtrl.text) ?? 0) : 0, 
+                        "work_minutes": newMins.toDouble(),
+                        "anomaly_flag": newAnomalyFlag,
+                      };
                     
                     _showConfirmUpdateDialog(log, newData, id, targetWorkType);
                   },
@@ -929,32 +970,98 @@ class _DataEditTabState extends State<DataEditTab> {
     );
   }
 
-  void _showForgotInputDialog(BuildContext context, TextEditingController hoursCtrl, TextEditingController minutesCtrl, DataProvider provider, bool isWhite) {
-    TimeOfDay? startTime;
-    TimeOfDay? endTime;
+  TimeOfDay? _parseTimeOfDay(dynamic val) {
+    if (val == null) return null;
+    final s = val.toString().trim();
+    if (!s.contains(':')) return null;
+    final parts = s.split(':');
+    if (parts.length < 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return TimeOfDay(hour: h, minute: m);
+  }
+
+  void _showForgotInputDialog(
+    BuildContext context, 
+    TextEditingController hoursCtrl, 
+    TextEditingController minutesCtrl, 
+    DataProvider provider, 
+    bool isWhite, {
+    String? startTimeStr,
+    String? endTimeStr,
+  }) {
+    TimeOfDay? startTime = _parseTimeOfDay(startTimeStr);
+    TimeOfDay? endTime = _parseTimeOfDay(endTimeStr);
 
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            int? previewDiff;
+            int previewBreak = 0;
+            if (startTime != null && endTime != null) {
+              int sMins = startTime!.hour * 60 + startTime!.minute;
+              int eMins = endTime!.hour * 60 + endTime!.minute;
+              if (eMins < sMins) eMins += 24 * 60;
+
+              final breaks = [
+                {'start': 11 * 60 + 55, 'duration': 50}, // 11:55 - 12:45
+                {'start': 15 * 60 + 0, 'duration': 10},  // 15:00 - 15:10
+                {'start': 18 * 60 + 30, 'duration': 10}, // 18:30 - 18:40
+              ];
+              for (var b in breaks) {
+                int bStart = b['start']!;
+                int bEnd = bStart + b['duration']!;
+                int overlapStart = sMins > bStart ? sMins : bStart;
+                int overlapEnd = eMins < bEnd ? eMins : bEnd;
+                if (overlapStart < overlapEnd) {
+                  previewBreak += (overlapEnd - overlapStart);
+                }
+              }
+              previewDiff = (eMins - sMins) - previewBreak;
+              if (previewDiff < 0) previewDiff = 0;
+            }
+
             return AlertDialog(
               backgroundColor: provider.currentCardColor,
-              title: Text("入力忘れ用 (時間計算)", style: TextStyle(color: provider.mainTextColor, fontWeight: FontWeight.bold)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(Icons.more_time, color: isWhite ? Colors.blue.shade600 : Colors.lightBlue),
+                  const SizedBox(width: 8),
+                  Text(
+                    "入力忘れ用 (時間計算)", 
+                    style: TextStyle(color: provider.mainTextColor, fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ],
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("開始時間と終了時間を選択してください。", style: TextStyle(color: provider.subTextColor, fontSize: 14)),
-                  const SizedBox(height: 20),
+                  Text(
+                    "開始時間と終了時間を選択してください。\n休憩時間（昼休憩50分、午後休憩10分等）は自動控除されます。", 
+                    style: TextStyle(color: provider.subTextColor, fontSize: 13, height: 1.4),
+                  ),
+                  const SizedBox(height: 18),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("開始時間:", style: TextStyle(color: provider.mainTextColor, fontSize: 18)),
-                      ElevatedButton(
+                      Text("開始時間:", style: TextStyle(color: provider.mainTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.access_time, size: 16),
+                        label: Text(
+                          startTime != null 
+                              ? "${startTime!.hour.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}" 
+                              : "選択", 
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isWhite ? Colors.grey.shade200 : Colors.white10,
                           foregroundColor: provider.mainTextColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         ),
                         onPressed: () async {
                           final picked = await showTimePicker(
@@ -966,19 +1073,26 @@ class _DataEditTabState extends State<DataEditTab> {
                             setDialogState(() => startTime = picked);
                           }
                         },
-                        child: Text(startTime != null ? "${startTime!.hour.toString().padLeft(2, '0')}:${startTime!.minute.toString().padLeft(2, '0')}" : "選択", style: const TextStyle(fontSize: 18)),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text("終了時間:", style: TextStyle(color: provider.mainTextColor, fontSize: 18)),
-                      ElevatedButton(
+                      Text("終了時間:", style: TextStyle(color: provider.mainTextColor, fontSize: 16, fontWeight: FontWeight.w600)),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.access_time_filled, size: 16),
+                        label: Text(
+                          endTime != null 
+                              ? "${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}" 
+                              : "選択", 
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isWhite ? Colors.grey.shade200 : Colors.white10,
                           foregroundColor: provider.mainTextColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         ),
                         onPressed: () async {
                           final picked = await showTimePicker(
@@ -990,16 +1104,36 @@ class _DataEditTabState extends State<DataEditTab> {
                             setDialogState(() => endTime = picked);
                           }
                         },
-                        child: Text(endTime != null ? "${endTime!.hour.toString().padLeft(2, '0')}:${endTime!.minute.toString().padLeft(2, '0')}" : "選択", style: const TextStyle(fontSize: 18)),
                       ),
                     ],
                   ),
+                  if (previewDiff != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isWhite ? Colors.blue.shade50 : Colors.blue.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: isWhite ? Colors.blue.shade200 : Colors.blue.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text("試算結果 (実働):", style: TextStyle(color: isWhite ? Colors.blue.shade900 : Colors.lightBlueAccent, fontSize: 14, fontWeight: FontWeight.w600)),
+                          Text(
+                            "$previewDiff 分 (${previewDiff ~/ 60}時間 ${previewDiff % 60}分)",
+                            style: TextStyle(color: isWhite ? Colors.blue.shade900 : Colors.lightBlueAccent, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext),
-                  child: Text("キャンセル", style: TextStyle(color: provider.subTextColor, fontSize: 16)),
+                  child: Text("キャンセル", style: TextStyle(color: provider.subTextColor, fontSize: 15)),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -1116,8 +1250,7 @@ class _DataEditTabState extends State<DataEditTab> {
           },
         ),
         actions: const [
-          // 💡 ここに追加：画面右上のオンライン・オフラインインジケーター
-          Center(child: _ConnectionStatusIndicator()), 
+          Center(child: ConnectionStatusIndicator()), 
           SizedBox(width: 20),
         ],
       ),
@@ -1618,15 +1751,41 @@ class _DataEditTabState extends State<DataEditTab> {
                 accentColor = isWhite ? Colors.orange.shade800 : Colors.amber;
               }
 
+              final int anomalyFlag = int.tryParse(log['anomaly_flag']?.toString() ?? '0') ?? 0;
               bool isEven = index % 2 == 0;
               Color rowBg = isWhite 
                   ? (isEven ? Colors.white : const Color(0xFFF2F6F9))
                   : (isEven ? const Color(0xFF0F1115) : const Color(0xFF14161C));
 
+              if (anomalyFlag != 0) {
+                rowBg = isWhite
+                    ? (anomalyFlag == 1
+                        ? Colors.orange.shade50.withValues(alpha: 0.92)
+                        : (anomalyFlag == 3
+                            ? Colors.purple.shade50.withValues(alpha: 0.92)
+                            : Colors.red.shade50.withValues(alpha: 0.92)))
+                    : (anomalyFlag == 1
+                        ? Colors.orange.shade900.withValues(alpha: 0.28)
+                        : (anomalyFlag == 3
+                            ? Colors.purple.shade900.withValues(alpha: 0.28)
+                            : Colors.red.shade900.withValues(alpha: 0.35)));
+              }
+
               return Container(
                 decoration: BoxDecoration(
                   color: rowBg,
-                  border: Border(bottom: BorderSide(color: dp.borderColor)),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: anomalyFlag != 0
+                          ? (anomalyFlag == 1
+                              ? Colors.orange.withValues(alpha: 0.6)
+                              : (anomalyFlag == 3
+                                  ? Colors.purpleAccent.withValues(alpha: 0.7)
+                                  : Colors.redAccent.withValues(alpha: 0.7)))
+                          : dp.borderColor,
+                      width: anomalyFlag != 0 ? 1.5 : 1.0,
+                    ),
+                  ),
                 ),
                 child: InkWell(
                   onTap: () => _showEditDialog(log),
@@ -1670,7 +1829,54 @@ class _DataEditTabState extends State<DataEditTab> {
                           flex: 1,
                           child: Align(
                             alignment: Alignment.center,
-                            child: Text(timeDisplay, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dp.mainTextColor))
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  timeDisplay,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: anomalyFlag != 0
+                                        ? (isWhite ? Colors.red.shade900 : Colors.redAccent)
+                                        : dp.mainTextColor,
+                                  ),
+                                ),
+                                if (anomalyFlag != 0)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 3),
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: anomalyFlag == 1
+                                          ? Colors.orange.withValues(alpha: 0.2)
+                                          : (anomalyFlag == 3
+                                              ? Colors.purple.withValues(alpha: 0.2)
+                                              : Colors.red.withValues(alpha: 0.2)),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: anomalyFlag == 1
+                                            ? Colors.orange
+                                            : (anomalyFlag == 3 ? Colors.purpleAccent : Colors.redAccent),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      anomalyFlag == 1
+                                          ? "⚠️<3分"
+                                          : (anomalyFlag == 3 ? "⚠️台数過大" : "⚠️12h+"),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                        color: anomalyFlag == 1
+                                            ? (isWhite ? Colors.deepOrange.shade800 : Colors.orangeAccent)
+                                            : (anomalyFlag == 3
+                                                ? (isWhite ? Colors.purple.shade800 : Colors.purpleAccent.shade100)
+                                                : (isWhite ? Colors.red.shade900 : Colors.redAccent)),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ), 
                         ),
                         Expanded(
@@ -1712,51 +1918,4 @@ class _DataEditTabState extends State<DataEditTab> {
     );
   }
 }
-
-// ----------------------------------------------------------------------
-// 💡 このファイル専用のオンライン/オフライン バッジ
-// ----------------------------------------------------------------------
-class _ConnectionStatusIndicator extends StatelessWidget {
-  const _ConnectionStatusIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    final data = context.watch<DataProvider>();
-    final bool isOnline = data.isOnline;
-    final bool isWhite = data.displayMode == DisplayMode.pureWhite;
-
-    final Color activeColor = isOnline 
-        ? (isWhite ? const Color(0xFF008844) : Colors.greenAccent)
-        : (isWhite ? const Color(0xFFCC0033) : Colors.redAccent);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: BoxDecoration(
-        color: isWhite ? activeColor.withOpacity(0.12) : activeColor.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: activeColor.withOpacity(isWhite ? 0.8 : 0.6), width: isWhite ? 2.0 : 1.5),
-        boxShadow: isWhite ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))] : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isOnline ? Icons.wifi : Icons.wifi_off,
-            color: activeColor,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            isOnline ? "Online" : "Offline",
-            style: TextStyle(
-              color: activeColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              letterSpacing: 1.0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+

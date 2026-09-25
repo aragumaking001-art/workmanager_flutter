@@ -1,0 +1,21 @@
+{
+  "tapo": {
+    "ip": "192.168.10.178",
+    "email": "daftly@hotmail.co.jp",
+    "password": "yama0322",
+    "_comment": "現場ネットワークへ移行時は ip を本番の固定IP（例: 192.168.10.150）に変更してください"
+  },
+  "database": {
+    "host": "192.168.10.101",
+    "port": 3306,
+    "user": "work_user",
+    "password": "work1234",
+    "database": "work_manager_db",
+    "_comment": "中央MariaDBサーバー設定"
+  },
+  "settings": {
+    "poll_interval_sec": 3,
+    "scope": "all_unprocessed",
+    "_comment_scope": "all_unprocessed: 過去含む未解消の全異常レコード (anomaly_flag != 0)"
+  }
+}

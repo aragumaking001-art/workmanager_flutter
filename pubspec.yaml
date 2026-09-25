@@ -20,12 +20,12 @@ dependencies:
     sdk: flutter
   table_calendar: ^3.1.2
   shared_preferences: ^2.5.5
+  flutter_native_splash: ^2.4.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: "^0.13.1"
-  flutter_native_splash: ^2.4.0
   flutter_lints: ^6.0.0
 
 # 💡 ここから設定セクション（一番左から書く）
@@ -84,4 +84,9 @@ flutter:
     - assets/nameplate_gold_wide.png
     - assets/bg_glassmorphism.jpg
     - assets/bg_tech_abstract.jpg
+    - assets/wakeflix_joutou_16x9.jpg
+    - assets/signage_integrated_system.jpg
+    - assets/signage_aim_for_excellent.jpg
+    - assets/wakeflix_ep1_ya_16x9.jpg
+    - assets/wakeflix_wakegame_16x9.jpg
   uses-material-design: true

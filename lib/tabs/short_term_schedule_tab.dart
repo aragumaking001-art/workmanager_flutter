@@ -56,6 +56,30 @@ class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
     super.dispose();
   }
 
+  int _getMakerOrder(String model, String maker) {
+    // PR-600 特有のメーカーソート順 (M/M -> H/O -> M/O)
+    if (model.contains('PR-600')) {
+      if (maker == 'M/M') return 1;
+      if (maker == 'H/O') return 2;
+      if (maker == 'M/O') return 3;
+    }
+
+    // デフォルトのメーカーソート順
+    if (maker == 'M') return 1;
+    if (maker == 'FA') return 2;
+    if (maker == 'O') return 3;
+
+    if (maker == 'M/M') return 4;
+    if (maker == 'M/O') return 5;
+    if (maker == 'F/M') return 6;
+    if (maker == 'F/O') return 7;
+    if (maker == 'H/M') return 8;
+    if (maker == 'H/O') return 9;
+    if (maker == 'O/O') return 10;
+
+    return 99; // その他のメーカー
+  }
+
   @override
   Widget build(BuildContext context) {
     final dp = Provider.of<DataProvider>(context);
@@ -121,6 +145,42 @@ class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
       scheduleData[uniqueKey]![dayStr]![1] += s.planCount;
     }
 
+    // 各日付の通常清掃標準時間に基づく作業ボリューム集計
+    Map<String, double> dayPlanHours = {};
+    Map<String, double> dayRemainHours = {};
+    Map<String, int> dayPlanUnits = {};
+    Map<String, int> dayActualUnits = {};
+
+    for (int i = 0; i < dates.length; i++) {
+      final d = dates[i];
+      final ds = dateStrings[i];
+      double planH = 0.0;
+      double remainH = 0.0;
+      int pUnits = 0;
+      int aUnits = 0;
+
+      for (var s in dp.scheduleList) {
+        if (s.targetDate.year == d.year &&
+            s.targetDate.month == d.month &&
+            s.targetDate.day == d.day) {
+          double stdRate = dp.getStandardCleanRate(s.modelName, s.makerName);
+          if (stdRate <= 0) stdRate = 10.0;
+
+          pUnits += s.planCount;
+          aUnits += s.actualCount;
+
+          planH += (s.planCount / stdRate);
+          int remainCount = (s.planCount > s.actualCount) ? (s.planCount - s.actualCount) : 0;
+          remainH += (remainCount / stdRate);
+        }
+      }
+
+      dayPlanHours[ds] = planH;
+      dayRemainHours[ds] = remainH;
+      dayPlanUnits[ds] = pUnits;
+      dayActualUnits[ds] = aUnits;
+    }
+
     // マスターデータからも情報を補完
     for (var m in dp.masterModelsList) {
       String maker = m['maker_name']?.toString() ?? '';
@@ -154,15 +214,26 @@ class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
       }
     }
 
-    // ソート (sort_id -> 機種名)
+    // ソート (sort_id -> 機種名 -> メーカー順)
     activeKeys.sort((a, b) {
       int sortA = sortIdMap[a] ?? 999999;
       int sortB = sortIdMap[b] ?? 999999;
       int cmp = sortA.compareTo(sortB);
       if (cmp != 0) return cmp;
+
       String modelA = modelNameMap[a] ?? '';
       String modelB = modelNameMap[b] ?? '';
-      return modelA.compareTo(modelB);
+      cmp = modelA.compareTo(modelB);
+      if (cmp != 0) return cmp;
+
+      String makerA = makerMap[a] ?? '';
+      String makerB = makerMap[b] ?? '';
+      int makerOrderA = _getMakerOrder(modelA, makerA);
+      int makerOrderB = _getMakerOrder(modelB, makerB);
+      cmp = makerOrderA.compareTo(makerOrderB);
+      if (cmp != 0) return cmp;
+
+      return makerA.compareTo(makerB);
     });
 
     return Scaffold(
@@ -250,18 +321,77 @@ class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
                     });
                   },
                 ),
-                for (var ds in dateStrings)
+                for (int i = 0; i < dateStrings.length; i++)
                   Expanded(
                     flex: 2,
                     child: Center(
-                      child: Text(
-                        ds, 
-                        style: TextStyle(
-                          color: ds.contains('土') ? (isWhite ? Colors.blue : Colors.lightBlueAccent) : 
-                                 ds.contains('日') ? (isWhite ? Colors.red : Colors.redAccent) : textColor, 
-                          fontWeight: FontWeight.bold, 
-                          fontSize: 20
-                        )
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Builder(
+                          builder: (context) {
+                            final ds = dateStrings[i];
+                            final int planUnits = dayPlanUnits[ds] ?? 0;
+                            final int actualUnits = dayActualUnits[ds] ?? 0;
+                            final double planH = dayPlanHours[ds] ?? 0.0;
+                            final double remainH = dayRemainHours[ds] ?? 0.0;
+                            final bool isCompleted = planUnits > 0 && (actualUnits >= planUnits || remainH <= 0.001);
+                            final String volumeText = isCompleted
+                                ? "完了"
+                                : "残${remainH.toStringAsFixed(1)}h";
+
+                            return Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  ds,
+                                  style: TextStyle(
+                                    color: ds.contains('土')
+                                        ? (isWhite ? Colors.blue : Colors.lightBlueAccent)
+                                        : ds.contains('日')
+                                            ? (isWhite ? Colors.red : Colors.redAccent)
+                                            : textColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                if (planUnits > 0 || actualUnits > 0) ...[
+                                  const SizedBox(width: 6),
+                                  Tooltip(
+                                    message: "【通常清掃の標準作業時間換算】\n"
+                                        "予定台数: ${planUnits}台 (所要: ${planH.toStringAsFixed(1)}時間)\n"
+                                        "完了台数: ${actualUnits}台 (残作業: ${remainH.toStringAsFixed(1)}時間)",
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isCompleted
+                                            ? (isWhite ? Colors.green.shade100 : Colors.green.withOpacity(0.20))
+                                            : (isWhite ? Colors.blue.shade50 : Colors.blue.withOpacity(0.18)),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: isCompleted
+                                              ? (isWhite ? Colors.green.shade600 : Colors.greenAccent)
+                                              : (isWhite ? Colors.blue.shade300 : Colors.lightBlueAccent.withOpacity(0.6)),
+                                          width: 1.0,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        volumeText,
+                                        style: TextStyle(
+                                          color: isCompleted
+                                              ? (isWhite ? Colors.green.shade900 : Colors.greenAccent)
+                                              : (isWhite ? Colors.blue.shade900 : Colors.lightBlueAccent),
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -563,7 +693,20 @@ class _ShortTermScheduleTabState extends State<ShortTermScheduleTab> {
       if (cmp != 0) return cmp;
       
       // 4. sort_order
-      return a.sortId.compareTo(b.sortId);
+      cmp = a.sortId.compareTo(b.sortId);
+      if (cmp != 0) return cmp;
+
+      // 5. 機種名
+      cmp = a.model.compareTo(b.model);
+      if (cmp != 0) return cmp;
+
+      // 6. メーカー順
+      int orderA = _getMakerOrder(a.model, a.maker);
+      int orderB = _getMakerOrder(b.model, b.maker);
+      cmp = orderA.compareTo(orderB);
+      if (cmp != 0) return cmp;
+
+      return a.maker.compareTo(b.maker);
     });
 
     final topPriorities = finalPriorities.take(5).toList();

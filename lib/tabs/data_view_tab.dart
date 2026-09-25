@@ -5,6 +5,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 import '../providers/data_provider.dart';
 import '../widgets/app_background_wrapper.dart';
+import '../widgets/anomaly_status_indicator.dart';
 
 enum SearchMode { date, worker }
 
@@ -23,6 +24,14 @@ class _DataViewTabState extends State<DataViewTab> {
   SearchMode _currentMode = SearchMode.date;
   String? _selectedWorkerForSearch;
   List<Map<String, dynamic>> _allWorkers = [];
+  bool _onlyShowAnomalies = false;
+
+  int get _anomalyCount {
+    return _logs.where((log) {
+      final flag = int.tryParse(log['anomaly_flag']?.toString() ?? '0') ?? 0;
+      return flag != 0;
+    }).length;
+  }
 
   List<String> get _uniqueWorkers {
     Set<String> workers = {};
@@ -35,12 +44,16 @@ class _DataViewTabState extends State<DataViewTab> {
   }
 
   List<Map<String, dynamic>> get _filteredLogs {
-    if (_selectedWorkerFilter == null || _selectedWorkerFilter == "すべて") {
-      return _logs;
-    }
     return _logs.where((log) {
-      String w = log['worker_name'] ?? log['worker_id'] ?? "不明";
-      return w == _selectedWorkerFilter;
+      if (_onlyShowAnomalies) {
+        final flag = int.tryParse(log['anomaly_flag']?.toString() ?? '0') ?? 0;
+        if (flag == 0) return false;
+      }
+      if (_selectedWorkerFilter != null && _selectedWorkerFilter != "すべて") {
+        String w = log['worker_name'] ?? log['worker_id'] ?? "不明";
+        if (w != _selectedWorkerFilter) return false;
+      }
+      return true;
     }).toList();
   }
 
@@ -71,7 +84,7 @@ class _DataViewTabState extends State<DataViewTab> {
         SELECT 
           l.id, l.work_date, l.model_name, l.maker, l.maker_abbr, l.worker_id, 
           l.clean_qty, l.air_clean_qty, l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty,
-          l.start_time_str, l.end_time_str, l.work_minutes, l.edit_count,
+          l.start_time_str, l.end_time_str, l.work_minutes, l.edit_count, l.anomaly_flag,
           mem.worker_name
         FROM unit_cleaning_logs l
         LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
@@ -138,7 +151,7 @@ class _DataViewTabState extends State<DataViewTab> {
         SELECT 
           l.id, l.work_date, l.model_name, l.maker, l.maker_abbr, l.worker_id, 
           l.clean_qty, l.air_clean_qty, l.swap_qty, l.to_clean_qty, l.to_swap_qty, l.std_qty,
-          l.start_time_str, l.end_time_str, l.work_minutes, l.edit_count,
+          l.start_time_str, l.end_time_str, l.work_minutes, l.edit_count, l.anomaly_flag,
           mem.worker_name
         FROM unit_cleaning_logs l
         LEFT JOIN m_members mem ON l.worker_id = mem.worker_id
@@ -600,7 +613,7 @@ class _DataViewTabState extends State<DataViewTab> {
                 ),
               ),
             ),
-          const Center(child: _ConnectionStatusIndicator()),
+          const Center(child: ConnectionStatusIndicator()),
           const SizedBox(width: 20),
         ],
       ),
@@ -992,6 +1005,12 @@ class _DataViewTabState extends State<DataViewTab> {
                                     );
                                   }
 
+                                  int anomalyFlag =
+                                      int.tryParse(
+                                        log['anomaly_flag']?.toString() ?? '0',
+                                      ) ??
+                                      0;
+
                                   Color rowBg = isWhite
                                       ? (isEven
                                             ? Colors.white.withValues(alpha: 0.85)
@@ -1000,12 +1019,33 @@ class _DataViewTabState extends State<DataViewTab> {
                                             ? const Color(0xFF0F1115).withValues(alpha: 0.75)
                                             : const Color(0xFF14161C).withValues(alpha: 0.75));
 
+                                  if (anomalyFlag != 0) {
+                                    rowBg = isWhite
+                                        ? (anomalyFlag == 1
+                                            ? Colors.orange.shade50.withValues(alpha: 0.92)
+                                            : (anomalyFlag == 3
+                                                ? Colors.purple.shade50.withValues(alpha: 0.92)
+                                                : Colors.red.shade50.withValues(alpha: 0.92)))
+                                        : (anomalyFlag == 1
+                                            ? Colors.orange.shade900.withValues(alpha: 0.28)
+                                            : (anomalyFlag == 3
+                                                ? Colors.purple.shade900.withValues(alpha: 0.28)
+                                                : Colors.red.shade900.withValues(alpha: 0.35)));
+                                  }
+
                                   return Container(
                                     decoration: BoxDecoration(
                                       color: rowBg,
                                       border: Border(
                                         bottom: BorderSide(
-                                          color: dp.borderColor,
+                                          color: anomalyFlag != 0
+                                              ? (anomalyFlag == 1
+                                                  ? Colors.orange.withValues(alpha: 0.6)
+                                                  : (anomalyFlag == 3
+                                                      ? Colors.purpleAccent.withValues(alpha: 0.7)
+                                                      : Colors.redAccent.withValues(alpha: 0.7)))
+                                              : dp.borderColor,
+                                          width: anomalyFlag != 0 ? 1.5 : 1.0,
                                         ),
                                       ),
                                     ),
@@ -1105,14 +1145,54 @@ class _DataViewTabState extends State<DataViewTab> {
                                             flex: 1,
                                             child: Align(
                                               alignment: Alignment.center,
-                                              child: Text(
-                                                timeDisplay,
-                                                style: TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: dp.mainTextColor,
-                                                ),
-                                                textAlign: TextAlign.center,
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    timeDisplay,
+                                                    style: TextStyle(
+                                                      fontSize: 18,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: anomalyFlag != 0
+                                                          ? (isWhite ? Colors.red.shade900 : Colors.redAccent)
+                                                          : dp.mainTextColor,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                  if (anomalyFlag != 0)
+                                                    Container(
+                                                      margin: const EdgeInsets.only(top: 3),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                      decoration: BoxDecoration(
+                                                        color: anomalyFlag == 1
+                                                            ? Colors.orange.withValues(alpha: 0.2)
+                                                            : (anomalyFlag == 3
+                                                                ? Colors.purple.withValues(alpha: 0.2)
+                                                                : Colors.red.withValues(alpha: 0.2)),
+                                                        borderRadius: BorderRadius.circular(4),
+                                                        border: Border.all(
+                                                          color: anomalyFlag == 1
+                                                              ? Colors.orange
+                                                              : (anomalyFlag == 3 ? Colors.purpleAccent : Colors.redAccent),
+                                                          width: 1,
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        anomalyFlag == 1
+                                                            ? "⚠️<3分"
+                                                            : (anomalyFlag == 3 ? "⚠️台数過大" : "⚠️12h+"),
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w900,
+                                                          color: anomalyFlag == 1
+                                                              ? (isWhite ? Colors.deepOrange.shade800 : Colors.orangeAccent)
+                                                              : (anomalyFlag == 3
+                                                                  ? (isWhite ? Colors.purple.shade800 : Colors.purpleAccent.shade100)
+                                                                  : (isWhite ? Colors.red.shade900 : Colors.redAccent)),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
                                               ),
                                             ),
                                           ),
@@ -1181,64 +1261,6 @@ class _DataViewTabState extends State<DataViewTab> {
                 fontSize: isText ? 16 : 20,
                 fontWeight: FontWeight.bold,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ConnectionStatusIndicator extends StatelessWidget {
-  const _ConnectionStatusIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    final data = context.watch<DataProvider>();
-    final bool isOnline = data.isOnline;
-    final bool isWhite = data.displayMode == DisplayMode.pureWhite;
-
-    final Color activeColor = isOnline
-        ? (isWhite ? const Color(0xFF008844) : Colors.greenAccent)
-        : (isWhite ? const Color(0xFFCC0033) : Colors.redAccent);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: BoxDecoration(
-        color: isWhite
-            ? activeColor.withOpacity(0.12)
-            : activeColor.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: activeColor.withOpacity(isWhite ? 0.8 : 0.6),
-          width: isWhite ? 2.0 : 1.5,
-        ),
-        boxShadow: isWhite
-            ? [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isOnline ? Icons.wifi : Icons.wifi_off,
-            color: activeColor,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            isOnline ? "Online" : "Offline",
-            style: TextStyle(
-              color: activeColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              letterSpacing: 1.0,
             ),
           ),
         ],

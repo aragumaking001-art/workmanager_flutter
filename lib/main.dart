@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,7 @@ import 'video_splash_screen.dart';
 import 'providers/data_provider.dart';
 import 'pages/personal_productivity_page.dart';
 import 'tabs/database_settings_tab.dart';
+import 'widgets/digital_signage_screen.dart';
 
 import 'tabs/summary_tab.dart';
 import 'tabs/today_summary_tab.dart';
@@ -23,6 +25,8 @@ import 'tabs/settings_tab.dart';
 import 'tabs/schedule_progress_tab.dart';
 import 'providers/kiosk_provider.dart';
 import 'widgets/app_background_wrapper.dart';
+import 'widgets/anomaly_status_indicator.dart';
+export 'widgets/anomaly_status_indicator.dart';
 
 // 💡 動作モードの定義
 enum AppMode { administrator, kiosk, manager }
@@ -106,13 +110,18 @@ void main() async {
             ..fetchAndAnalyze()
             ..startAutoRefresh(),
         ),
-        ChangeNotifierProvider(create: (_) => KioskProvider()),
+        ChangeNotifierProvider(
+          create: (_) => KioskProvider(isEnabled: currentMode == AppMode.kiosk),
+        ),
       ],
       // 💡 判定されたモードとIPをアプリ全体に渡す
       child: MyApp(appMode: currentMode, ipAddress: myIp),
     ),
   );
 }
+
+// 💡 画面遷移を監視して、メインメニュー復帰時にサイネージタイマーを確実にリセットするためのオブザーバー
+final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
 
 class MyApp extends StatelessWidget {
   final AppMode appMode;
@@ -125,6 +134,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: '和気センター WorkManager Pro',
+      navigatorObservers: [routeObserver],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -152,67 +162,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ----------------------------------------------------------------------
-// 💡 共通で使えるオンライン・オフラインのインジケーターUI
-// ----------------------------------------------------------------------
-class ConnectionStatusIndicator extends StatelessWidget {
-  const ConnectionStatusIndicator({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final data = context.watch<DataProvider>();
-    final bool isOnline = data.isOnline;
-    final bool isWhite = data.displayMode == DisplayMode.pureWhite;
-
-    // 💡 白モードではディープで美しい視認性を発揮するグリーン/レッドを使用！
-    final Color activeColor = isOnline
-        ? (isWhite ? const Color(0xFF008844) : Colors.greenAccent)
-        : (isWhite ? const Color(0xFFCC0033) : Colors.redAccent);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      decoration: BoxDecoration(
-        color: isWhite
-            ? activeColor.withOpacity(0.12)
-            : activeColor.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: activeColor.withOpacity(isWhite ? 0.8 : 0.6),
-          width: isWhite ? 2.0 : 1.5,
-        ),
-        boxShadow: isWhite
-            ? [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isOnline ? Icons.wifi : Icons.wifi_off,
-            color: activeColor,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            isOnline ? "Online" : "Offline",
-            style: TextStyle(
-              color: activeColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              letterSpacing: 1.0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // --- 🏠 メインメニュー画面（管理者・マネージャ共用） ---
 class MainLayout extends StatefulWidget {
@@ -223,14 +172,94 @@ class MainLayout extends StatefulWidget {
   State<MainLayout> createState() => _MainLayoutState();
 }
 
-class _MainLayoutState extends State<MainLayout> {
+class _MainLayoutState extends State<MainLayout>
+    with RouteAware, WidgetsBindingObserver {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
+  // 💡 放置時間設定（デバッグ用30秒。運用時は2分等に変更可能）
+  static const Duration _inactivityTimeout = Duration(seconds: 30);
+  Timer? _inactivityTimer;
+  bool _isSignageActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _resetInactivityTimer();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final modalRoute = ModalRoute.of(context);
+    if (modalRoute != null) {
+      routeObserver.subscribe(this, modalRoute);
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    routeObserver.unsubscribe(this);
+    _inactivityTimer?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    // 他の画面やダイアログからメインメニューへ戻った際に、即座に放置タイマーを開始・リセット
+    _isSignageActive = false;
+    _resetInactivityTimer();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (ModalRoute.of(context)?.isCurrent == true) {
+        _isSignageActive = false;
+        _resetInactivityTimer();
+      }
+    }
+  }
+
+  /// ユーザー操作時にタイマーを再スタート
+  void _resetInactivityTimer() {
+    _inactivityTimer?.cancel();
+    if (!mounted || _isSignageActive) return;
+    _inactivityTimer = Timer(_inactivityTimeout, _openSignage);
+  }
+
+  /// スクリーンセーバー／サイネージ画面を開く
+  void _openSignage() {
+    // メインメニューが最前面にない（他のタブを開いている）場合は開かないが、
+    // タイマーを消滅させずに再スケジュールして待機状態を維持する
+    if (!mounted || _isSignageActive) return;
+    if (ModalRoute.of(context)?.isCurrent != true) {
+      _resetInactivityTimer();
+      return;
+    }
+
+    setState(() => _isSignageActive = true);
+    _inactivityTimer?.cancel();
+
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const DigitalSignageScreen(),
+        transitionDuration: const Duration(milliseconds: 600),
+        reverseTransitionDuration: const Duration(milliseconds: 400),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    ).then((_) {
+      if (mounted) {
+        setState(() => _isSignageActive = false);
+        _resetInactivityTimer();
+      }
+    });
   }
 
   @override
@@ -379,72 +408,78 @@ class _MainLayoutState extends State<MainLayout> {
     final dp = context.watch<DataProvider>();
     final isWhiteMode = dp.displayMode == DisplayMode.pureWhite;
 
-    return AppBackgroundWrapper(
-      blurSigma: 8.0,
-      whiteAlpha: 0.70,
-      darkAlpha: 0.60,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _resetInactivityTimer(),
+      onPointerMove: (_) => _resetInactivityTimer(),
+      onPointerHover: (_) => _resetInactivityTimer(),
+      onPointerSignal: (_) => _resetInactivityTimer(),
+      child: AppBackgroundWrapper(
+        blurSigma: 8.0,
+        whiteAlpha: 0.70,
+        darkAlpha: 0.60,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
           appBar: AppBar(
             backgroundColor: dp.currentCardColor.withValues(alpha: 0.5),
             elevation: dp.displayMode == DisplayMode.pureWhite ? 2 : 0,
-        title: Text(
-          widget.appMode == AppMode.administrator
-              ? "和気センター 統合ダッシュボード [管理者]"
-              : "和気センター 統合ダッシュボード [4Fスーパーバイザー]",
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: dp.mainTextColor,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          if (widget.appMode == AppMode.administrator)
-            Builder(
-              builder: (ctx) => IconButton(
-                icon: Icon(
-                  Icons.download,
-                  color: dp.displayMode == DisplayMode.pureWhite
-                      ? const Color(0xFF006688)
-                      : const Color(0xFF00CCFF),
-                  size: 30,
-                ),
-                tooltip: "CSVを出力 (PC:デスクトップ / タブ:ダウンロード)",
-                onPressed: () async {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text("CSVファイルを作成しています...")),
-                  );
-                  String? path = await Provider.of<DataProvider>(
-                    ctx,
-                    listen: false,
-                  ).exportCsvToDatabasePC();
-                  if (path != null) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(
-                        content: Text("✅ CSV出力完了\nPCのデスクトップ ($path) に保存しました！"),
-                        backgroundColor: Colors.green,
-                        duration: const Duration(seconds: 4),
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          "❌ CSV出力失敗 (データベース側の設定で保存先が制限されている可能性があります)",
-                        ),
-                        backgroundColor: Colors.redAccent,
-                        duration: Duration(seconds: 5),
-                      ),
-                    );
-                  }
-                },
+            title: Text(
+              widget.appMode == AppMode.administrator
+                  ? "和気センター 統合ダッシュボード [管理者]"
+                  : "和気センター 統合ダッシュボード [4Fスーパーバイザー]",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: dp.mainTextColor,
               ),
             ),
-          const SizedBox(width: 15),
-          const Center(child: ConnectionStatusIndicator()), // 💡 メイン画面の右上
-          const SizedBox(width: 20),
-        ],
-      ),
+            centerTitle: true,
+            actions: [
+              if (widget.appMode == AppMode.administrator)
+                Builder(
+                  builder: (ctx) => IconButton(
+                    icon: Icon(
+                      Icons.download,
+                      color: dp.displayMode == DisplayMode.pureWhite
+                          ? const Color(0xFF006688)
+                          : const Color(0xFF00CCFF),
+                      size: 30,
+                    ),
+                    tooltip: "CSVを出力 (PC:デスクトップ / タブ:ダウンロード)",
+                    onPressed: () async {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text("CSVファイルを作成しています...")),
+                      );
+                      String? path = await Provider.of<DataProvider>(
+                        ctx,
+                        listen: false,
+                      ).exportCsvToDatabasePC();
+                      if (path != null) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(
+                            content: Text("✅ CSV出力完了\nPCのデスクトップ ($path) に保存しました！"),
+                            backgroundColor: Colors.green,
+                            duration: const Duration(seconds: 4),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "❌ CSV出力失敗 (データベース側の設定で保存先が制限されている可能性があります)",
+                            ),
+                            backgroundColor: Colors.redAccent,
+                            duration: Duration(seconds: 5),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              const SizedBox(width: 10),
+              const Center(child: ConnectionStatusIndicator()), // 💡 メイン画面の右上
+              const SizedBox(width: 20),
+            ],
+          ),
       body: widget.appMode == AppMode.manager
           ? SingleChildScrollView(
               child: Padding(
@@ -717,8 +752,9 @@ class _MainLayoutState extends State<MainLayout> {
                 _buildFloatingSideNav(isWhiteMode: isWhiteMode),
               ],
             ),
-      ),
-    );
+          ),
+        ),
+      );
   }
 
   // 💡 画面端のフローティングナビゲーションボタン（1ページ目は右端に「次へ」、2ページ目は左端に「戻る」）
@@ -857,6 +893,7 @@ class _MainLayoutState extends State<MainLayout> {
         targetPage: targetPage,
         imagePath: imagePath,
         entranceIndex: entranceIndex,
+        onReturn: _resetInactivityTimer,
       ),
     );
   }
@@ -870,6 +907,7 @@ class InteractiveMenuCard extends StatefulWidget {
   final Widget? targetPage;
   final String? imagePath;
   final int entranceIndex;
+  final VoidCallback? onReturn;
 
   const InteractiveMenuCard({
     super.key,
@@ -879,6 +917,7 @@ class InteractiveMenuCard extends StatefulWidget {
     this.targetPage,
     this.imagePath,
     this.entranceIndex = 0,
+    this.onReturn,
   });
 
   @override
@@ -889,22 +928,23 @@ class _InteractiveMenuCardState extends State<InteractiveMenuCard>
     with TickerProviderStateMixin {
   bool _isHovered = false;
   bool _isPressed = false;
-  late AnimationController _shimmerController;
-  late Animation<double> _shimmerAnimation;
 
-  late AnimationController _entranceController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _scaleAnimation;
+  late final AnimationController _entranceController;
+  late final AnimationController _shimmerController;
+
+  late final Animation<double> _fadeAnimation;
+  late final Animation<Offset> _slideAnimation;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _shimmerAnimation;
 
   @override
   void initState() {
     super.initState();
 
-    // 🚀 画面登場アニメーション（ドミノ式スタッガード）
+    // 🎬 画面遷移時のドミノ倒し風カード登場アニメーション
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 480),
+      duration: const Duration(milliseconds: 650),
     );
 
     _fadeAnimation = CurvedAnimation(
@@ -936,32 +976,32 @@ class _InteractiveMenuCardState extends State<InteractiveMenuCard>
       }
     });
 
-    // ✨ シマー光彩アニメーション
+    // ✨ シマー光彩アニメーション（ホバー・タップ・登場時のみ発火させて放置時のCPU負荷をゼロにする）
     _shimmerController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3800),
+      duration: const Duration(milliseconds: 1400),
     );
 
     _shimmerAnimation = Tween<double>(begin: -1.0, end: 2.0).animate(
       CurvedAnimation(
         parent: _shimmerController,
-        curve: const Interval(0.0, 0.42, curve: Curves.easeInOutSine),
+        curve: Curves.easeInOutSine,
       ),
     );
 
+    // 画面登場時に一度だけ優雅にシマーを一閃させる
     if (widget.targetPage != null) {
-      _shimmerController.repeat();
+      Future.delayed(Duration(milliseconds: delayMs + 350), () {
+        if (mounted) {
+          _shimmerController.forward(from: 0.0);
+        }
+      });
     }
   }
 
   @override
   void didUpdateWidget(InteractiveMenuCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.targetPage != null && !_shimmerController.isAnimating) {
-      _shimmerController.repeat();
-    } else if (widget.targetPage == null && _shimmerController.isAnimating) {
-      _shimmerController.stop();
-    }
   }
 
   @override
@@ -978,57 +1018,68 @@ class _InteractiveMenuCardState extends State<InteractiveMenuCard>
     final isWhiteMode = dp.displayMode == DisplayMode.pureWhite;
     final isHighlighted = isAvailable && (_isHovered || _isPressed);
 
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: ScaleTransition(
-          scale: _scaleAnimation,
-          child: MouseRegion(
-            onEnter: isAvailable ? (_) => setState(() => _isHovered = true) : null,
-            onExit: isAvailable ? (_) => setState(() => _isHovered = false) : null,
-            cursor: isAvailable ? SystemMouseCursors.click : SystemMouseCursors.basic,
-            child: AnimatedScale(
-              scale: isHighlighted ? 1.035 : 1.0,
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: isAvailable
-              ? () {
-                  Navigator.push(
-                    context,
-                    PageRouteBuilder(
-                      pageBuilder: (context, animation, secondaryAnimation) =>
-                          widget.targetPage!,
-                      transitionDuration: const Duration(milliseconds: 280),
-                      reverseTransitionDuration:
-                          const Duration(milliseconds: 240),
-                      transitionsBuilder:
-                          (context, animation, secondaryAnimation, child) {
-                        final curve = CurvedAnimation(
-                          parent: animation,
-                          curve: Curves.easeOutCubic,
-                          reverseCurve: Curves.easeInCubic,
-                        );
-                        return FadeTransition(
-                          opacity: Tween<double>(begin: 0.0, end: 1.0)
-                              .animate(curve),
-                          child: ScaleTransition(
-                            scale: Tween<double>(begin: 0.92, end: 1.0)
-                                .animate(curve),
-                            child: child,
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                }
-              : null,
-          onHighlightChanged: isAvailable
-              ? (val) => setState(() => _isPressed = val)
-              : null,
-          child: AnimatedContainer(
+    return RepaintBoundary(
+      child: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: ScaleTransition(
+            scale: _scaleAnimation,
+            child: MouseRegion(
+              onEnter: isAvailable
+                  ? (_) {
+                      setState(() => _isHovered = true);
+                      _shimmerController.forward(from: 0.0);
+                    }
+                  : null,
+              onExit: isAvailable ? (_) => setState(() => _isHovered = false) : null,
+              cursor: isAvailable ? SystemMouseCursors.click : SystemMouseCursors.basic,
+              child: AnimatedScale(
+                scale: isHighlighted ? 1.035 : 1.0,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: isAvailable
+                      ? () {
+                          Navigator.push(
+                            context,
+                            PageRouteBuilder(
+                              pageBuilder: (context, animation, secondaryAnimation) =>
+                                  widget.targetPage!,
+                              transitionDuration: const Duration(milliseconds: 280),
+                              reverseTransitionDuration:
+                                  const Duration(milliseconds: 240),
+                              transitionsBuilder:
+                                  (context, animation, secondaryAnimation, child) {
+                                final curve = CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                  reverseCurve: Curves.easeInCubic,
+                                );
+                                return FadeTransition(
+                                  opacity: Tween<double>(begin: 0.0, end: 1.0)
+                                      .animate(curve),
+                                  child: ScaleTransition(
+                                    scale: Tween<double>(begin: 0.92, end: 1.0)
+                                        .animate(curve),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                            ),
+                          ).then((_) {
+                            widget.onReturn?.call();
+                          });
+                        }
+                      : null,
+                  onHighlightChanged: isAvailable
+                      ? (val) {
+                          setState(() => _isPressed = val);
+                          if (val) _shimmerController.forward(from: 0.0);
+                        }
+                      : null,
+                  child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
             height: 200,
@@ -1240,14 +1291,15 @@ class _InteractiveMenuCardState extends State<InteractiveMenuCard>
     ),
   ),
 ),
+),
 );
   }
 }
 
 // ============================================================================
-// 💡 セクションヘッダー用: 呼吸発光アクセントピラー (PulsingAccentPillar)
+// 💡 セクションヘッダー用: 発光アクセントピラー (PulsingAccentPillar - 静的グロー化で省電力)
 // ============================================================================
-class PulsingAccentPillar extends StatefulWidget {
+class PulsingAccentPillar extends StatelessWidget {
   final Color color;
   final bool isWhiteMode;
 
@@ -1258,68 +1310,29 @@ class PulsingAccentPillar extends StatefulWidget {
   });
 
   @override
-  State<PulsingAccentPillar> createState() => _PulsingAccentPillarState();
-}
-
-class _PulsingAccentPillarState extends State<PulsingAccentPillar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _pulseAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat(reverse: true);
-
-    _pulseAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOutSine,
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) {
-        final t = _pulseAnimation.value;
-        final blur = 6.0 + (t * 8.0); // 6.0 -> 14.0
-        final spread = 0.5 + (t * 1.8); // 0.5 -> 2.3
-        final glowAlpha = 0.40 + (t * 0.45); // 0.40 -> 0.85
-
-        return Container(
-          width: 5,
-          height: 28,
-          decoration: BoxDecoration(
-            color: widget.color,
-            borderRadius: BorderRadius.circular(3),
-            boxShadow: widget.isWhiteMode
-                ? [
-                    BoxShadow(
-                      color: widget.color.withValues(alpha: 0.25 + (t * 0.2)),
-                      blurRadius: 4.0 + (t * 4.0),
-                      spreadRadius: 0.5,
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: widget.color.withValues(alpha: glowAlpha),
-                      blurRadius: blur,
-                      spreadRadius: spread,
-                    ),
-                  ],
-          ),
-        );
-      },
+    return Container(
+      width: 5,
+      height: 28,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(3),
+        boxShadow: isWhiteMode
+            ? [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.35),
+                  blurRadius: 6.0,
+                  spreadRadius: 0.5,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.65),
+                  blurRadius: 10.0,
+                  spreadRadius: 1.5,
+                ),
+              ],
+      ),
     );
   }
 }
